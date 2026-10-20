@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 
 import { listContainers } from "./docker.js";
 import { ToolError } from "./errors.js";
-import { buildViews, sharedTarget, type KillTarget, type PortView } from "./inspect.js";
+import { sharedTarget, type KillTarget, type PortView } from "./inspect.js";
 import {
   createPosixRunner,
   dockerStop,
@@ -21,6 +21,7 @@ import type { ListenerQuery } from "./platform/types.js";
 import { parsePort, PortError } from "./port.js";
 import { formatKillJson, formatListenersJson, formatPortReport, formatTable, useColor } from "./report.js";
 import { nodeProjectFs, readProcesses, type ProcessDetails, type ProjectFs } from "./resolve.js";
+import { loadPortViews } from "./snapshot.js";
 import { parseInterval, parseTimeoutSeconds, snapshotFromViews, watchPort } from "./watch.js";
 
 const USAGE = "Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]";
@@ -140,12 +141,9 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
 
 async function loadViews(deps: CliDeps, port: number | null, io: CliIO): Promise<PortView[] | null> {
   try {
-    const query = await deps.listListeners();
-    for (const warning of query.warnings) io.error(`warning: ${warning}`);
-    const listeners = port === null ? query.listeners : query.listeners.filter((listener) => listener.port === port);
-    const pids = [...new Set(listeners.map((listener) => listener.pid).filter((pid) => pid > 0))];
-    const [details, containers] = await Promise.all([deps.readProcesses(pids), deps.containers()]);
-    return buildViews(listeners, details, containers, deps.projectFs, deps.now());
+    const snapshot = await loadPortViews(deps, port);
+    for (const warning of snapshot.warnings) io.error(`warning: ${warning}`);
+    return snapshot.views;
   } catch (error) {
     if (error instanceof ToolError) {
       io.error(error.message);

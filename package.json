@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc",
     "whoport": "tsx src/cli.ts",
-    "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts tests/resolve.test.ts tests/docker.test.ts tests/kill.test.ts tests/inspect.test.ts tests/report.test.ts tests/cli.test.ts tests/linux.test.ts tests/darwin.test.ts tests/watch.test.ts",
+    "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts tests/resolve.test.ts tests/docker.test.ts tests/kill.test.ts tests/inspect.test.ts tests/report.test.ts tests/cli.test.ts tests/linux.test.ts tests/darwin.test.ts tests/watch.test.ts tests/ui-server.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
