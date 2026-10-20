@@ -8,6 +8,7 @@ export function PortTable({
   pagePort,
   openKey,
   fading,
+  stopping,
   copiedKey,
   onToggle,
   onStop,
@@ -18,6 +19,7 @@ export function PortTable({
   pagePort: number | null;
   openKey: string | null;
   fading: ReadonlySet<string>;
+  stopping: ReadonlySet<string>;
   copiedKey: string | null;
   onToggle: (key: string) => void;
   onStop: (row: Listener) => void;
@@ -67,6 +69,7 @@ export function PortTable({
                 pagePort={pagePort}
                 open={openKey === key}
                 fading={fading.has(key)}
+                stopping={stopping.has(key)}
                 copied={copiedKey === key}
                 onToggle={() => onToggle(key)}
                 onStop={() => onStop(row)}

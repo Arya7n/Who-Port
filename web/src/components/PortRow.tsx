@@ -12,6 +12,7 @@ import type { Listener } from "../types.js";
 const BORDER: Record<RowKind, string> = {
   dev: "border-l-[var(--dev)]",
   docker: "border-l-[var(--docker)]",
+  other: "border-l-[var(--other)]",
   system: "border-l-[var(--system)]",
   unidentified: "border-l-[var(--line)]",
 };
@@ -19,6 +20,7 @@ const BORDER: Record<RowKind, string> = {
 const TAG: Record<RowKind, string> = {
   dev: "text-[var(--dev)]",
   docker: "text-[var(--docker)]",
+  other: "text-[var(--other)]",
   system: "text-[var(--system)]",
   unidentified: "text-[var(--muted)]",
 };
@@ -28,6 +30,7 @@ export function PortRow({
   pagePort,
   open,
   fading,
+  stopping,
   copied,
   onToggle,
   onStop,
@@ -37,6 +40,7 @@ export function PortRow({
   pagePort: number | null;
   open: boolean;
   fading: boolean;
+  stopping: boolean;
   copied: boolean;
   onToggle: () => void;
   onStop: () => void;
@@ -79,7 +83,15 @@ export function PortRow({
         </td>
         <td className="px-2 py-2 text-[var(--muted)]">{row.uptime ?? "unknown"}</td>
         <td className="px-2 py-2 text-right">
-          <RowAction own={own} kind={kind} copied={copied} command={command} onStop={onStop} onCopy={onCopy} />
+          <RowAction
+            own={own}
+            kind={kind}
+            copied={copied}
+            stopping={stopping}
+            command={command}
+            onStop={onStop}
+            onCopy={onCopy}
+          />
         </td>
       </tr>
       {open ? (
@@ -111,6 +123,7 @@ function RowAction({
   own,
   kind,
   copied,
+  stopping,
   command,
   onStop,
   onCopy,
@@ -118,6 +131,7 @@ function RowAction({
   own: boolean;
   kind: RowKind;
   copied: boolean;
+  stopping: boolean;
   command: string | null;
   onStop: () => void;
   onCopy: () => void;
@@ -144,13 +158,14 @@ function RowAction({
   return (
     <button
       type="button"
+      disabled={stopping}
       onClick={(event) => {
         event.stopPropagation();
         onStop();
       }}
-      className="h-8 rounded border border-[var(--line)] bg-[var(--surface)] px-2 text-sm"
+      className="h-8 rounded border border-[var(--line)] bg-[var(--surface)] px-2 text-sm disabled:cursor-wait disabled:text-[var(--muted)]"
     >
-      Stop
+      {stopping ? "Stopping…" : "Stop"}
     </button>
   );
 }

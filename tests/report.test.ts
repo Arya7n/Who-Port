@@ -86,6 +86,15 @@ test("renders the --all table without color", () => {
         kind: "system",
         verdict: "protected",
       }),
+      view({
+        port: 50789,
+        pid: 11200,
+        command: "SpotifyLauncher.exe",
+        commandLine: null,
+        project: null,
+        kind: "other",
+        verdict: "other",
+      }),
     ],
     { color: false, numbers: false },
   );
@@ -93,10 +102,11 @@ test("renders the --all table without color", () => {
   assert.equal(
     text,
     [
-      " PORT      PID  PROCESS                 PROJECT               UPTIME  ",
-      " 3000    18432  node.exe                chat-service          2h ago  ",
-      " 6380     9012  patent-dev-redis-1      patent-dev/redis      unknown ",
-      "  445        4  System                  unknown               2w ago  ",
+      " PORT      PID  PROCESS                 PROJECT               UPTIME    KIND",
+      " 3000    18432  node.exe                chat-service          2h ago    DEV",
+      " 6380     9012  patent-dev-redis-1      patent-dev/redis      unknown   DOCKER",
+      "  445        4  System                  unknown               2w ago    SYSTEM",
+      "50789    11200  SpotifyLauncher.exe     unknown               2h ago    OTHER",
     ].join("\n"),
   );
 });
@@ -105,6 +115,12 @@ test("colors a dev process green and dims the pid", () => {
   const text = formatTable([view()], { color: true, numbers: false });
   assert.match(text, /\x1b\[32m/);
   assert.match(text, /\x1b\[2m/);
+  const other = formatTable([view({ command: "AsusSoftwareManager.exe", project: null, kind: "other" })], {
+    color: true,
+    numbers: false,
+  });
+  assert.doesNotMatch(other, /\x1b\[3[123]m/);
+  assert.match(other, /OTHER$/);
   assert.equal(useColor({ NO_COLOR: "1" }, true), false);
   assert.equal(useColor({}, false), false);
   assert.equal(useColor({}, true), true);

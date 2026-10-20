@@ -5,6 +5,7 @@ import {
   counts,
   DEFAULT_FILTER,
   dockerStopCommand,
+  needsConfirm,
   processName,
   projectLabel,
   rowKind,
@@ -63,12 +64,22 @@ test("row kind comes from the server", () => {
 
 test("an unidentified row stays visible with Dev and is counted on its own", () => {
   const rows = [row(), nameless, system];
-  assert.deepEqual(counts(rows), { dev: 1, docker: 0, system: 1, unidentified: 1 });
+  assert.deepEqual(counts(rows), { dev: 1, docker: 0, other: 0, system: 1, unidentified: 1 });
   assert.deepEqual(
     visibleRows(rows, DEFAULT_FILTER).map((item) => item.port),
     [3000, 8080],
   );
   assert.equal(processName(nameless), "(unknown)");
+});
+
+test("other apps are hidden by default and always ask before a stop", () => {
+  const spotify = row({ port: 50789, pid: 11200, command: "SpotifyLauncher.exe", project: null, kind: "other" });
+  const rows = [row(), spotify];
+  assert.deepEqual(counts(rows), { dev: 1, docker: 0, other: 1, system: 0, unidentified: 0 });
+  assert.deepEqual(visibleRows(rows, DEFAULT_FILTER).map((item) => item.port), [3000]);
+  assert.deepEqual(visibleRows(rows, { ...DEFAULT_FILTER, other: true }).map((item) => item.port), [3000, 50789]);
+  assert.equal(needsConfirm(row()), false);
+  assert.equal(needsConfirm(spotify), true);
 });
 
 test("labels name the container and the compose project, never the forwarder", () => {
@@ -81,7 +92,7 @@ test("labels name the container and the compose project, never the forwarder", (
 
 test("default view keeps dev and docker and hides system", () => {
   const rows = [system, row({ port: 4000 }), docker];
-  assert.deepEqual(counts(rows), { dev: 1, docker: 1, system: 1, unidentified: 0 });
+  assert.deepEqual(counts(rows), { dev: 1, docker: 1, other: 0, system: 1, unidentified: 0 });
   assert.deepEqual(
     visibleRows(rows, DEFAULT_FILTER).map((item) => item.port),
     [4000, 5432],
@@ -91,7 +102,7 @@ test("default view keeps dev and docker and hides system", () => {
     [],
   );
   assert.deepEqual(
-    visibleRows(rows, { dev: false, docker: true, system: true, query: "135" }).map((item) => item.port),
+    visibleRows(rows, { dev: false, docker: true, other: false, system: true, query: "135" }).map((item) => item.port),
     [135],
   );
   assert.deepEqual(

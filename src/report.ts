@@ -30,11 +30,20 @@ export function dim(enabled: boolean, text: string): string {
   return paint(enabled, "2", text);
 }
 
+/** OTHER keeps the terminal's own color, so only dev servers read as green. */
 function tone(view: PortView): string | null {
   if (view.docker) return "33";
   if (view.pid === 0) return null;
-  if (view.protected) return "31";
-  return "32";
+  switch (view.kind) {
+    case "system":
+      return "31";
+    case "dev":
+      return "32";
+    case "unidentified":
+      return "2";
+    default:
+      return null;
+  }
 }
 
 function cell(value: string, width: number, align: "left" | "right"): string {
@@ -82,6 +91,7 @@ function rowText(view: PortView, style: ReportStyle, index: number | null): stri
     coloredProcess,
     cell(projectLabel(view), 20, "left"),
     paint(style.color, "2", cell(view.uptime ?? "unknown", 8, "left")),
+    view.kind.toUpperCase(),
   ].join("  ");
   if (!style.numbers || index === null) return body;
   return `${cell(String(index), 3, "right")}  ${body}`;
@@ -94,6 +104,7 @@ function header(style: ReportStyle): string {
     cell("PROCESS", 22, "left"),
     cell("PROJECT", 20, "left"),
     cell("UPTIME", 8, "left"),
+    "KIND",
   ].join("  ");
   const line = style.numbers ? `${cell("#", 3, "right")}  ${body}` : body;
   return style.color ? paint(true, "1", line) : line;

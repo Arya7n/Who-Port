@@ -10,6 +10,7 @@
   --dev: #1f7a4d;
   --docker: #8a5a00;
   --system: #9d342c;
+  --other: #5c6470;
   --focus: #1c1917;
 }
 
@@ -24,6 +25,7 @@
     --dev: #8fd0aa;
     --docker: #e4b65a;
     --system: #f0a29a;
+    --other: #b3bac4;
     --focus: #f4f1ea;
   }
 }

@@ -12,7 +12,7 @@ export interface DockerInfo {
   service: string | null;
 }
 
-export type RowKind = "dev" | "docker" | "system" | "unidentified";
+export type RowKind = "dev" | "docker" | "other" | "system" | "unidentified";
 
 export interface Listener {
   port: number;

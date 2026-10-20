@@ -2,14 +2,16 @@ import type { ViewFilter } from "../classify.js";
 
 export function Toolbar({
   filter,
+  otherCount,
   systemCount,
   onChange,
 }: {
   filter: ViewFilter;
+  otherCount: number;
   systemCount: number;
   onChange: (next: ViewFilter) => void;
 }) {
-  const toggle = (key: "dev" | "docker" | "system") => {
+  const toggle = (key: "dev" | "docker" | "other" | "system") => {
     onChange({ ...filter, [key]: !filter[key] });
   };
 
@@ -27,6 +29,9 @@ export function Toolbar({
       </Chip>
       <Chip pressed={filter.docker} onClick={() => toggle("docker")}>
         Docker
+      </Chip>
+      <Chip pressed={filter.other} onClick={() => toggle("other")}>
+        {`Show other (${otherCount})`}
       </Chip>
       <Chip pressed={filter.system} onClick={() => toggle("system")}>
         {`Show system (${systemCount})`}

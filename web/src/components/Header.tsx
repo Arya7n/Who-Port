@@ -10,7 +10,7 @@ export function Header({ tally, live }: { tally: Tally; live: boolean }) {
       </div>
       <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
         <p>
-          {`${tally.dev} dev, ${tally.docker} docker, ${tally.system} system${unidentified}`}
+          {`${tally.dev} dev, ${tally.docker} docker, ${tally.other} other, ${tally.system} system${unidentified}`}
         </p>
         <span
           className={live ? "inline-block h-2 w-2 rounded-full bg-[var(--dev)]" : "inline-block h-2 w-2 rounded-full bg-[var(--muted)] opacity-40"}

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { killPid } from "./api.js";
-import { counts, DEFAULT_FILTER, dockerStopCommand, rowKey, visibleRows, type ViewFilter } from "./classify.js";
+import { counts, DEFAULT_FILTER, dockerStopCommand, needsConfirm, rowKey, visibleRows, type ViewFilter } from "./classify.js";
 import { Banner } from "./components/Banner.js";
 import { Header } from "./components/Header.js";
 import { PortTable } from "./components/PortTable.js";
@@ -26,6 +26,7 @@ export function App() {
   const pendingRef = useRef<Listener | null>(null);
   pendingRef.current = pending;
   const [fading, setFading] = useState<ReadonlySet<string>>(new Set());
+  const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
@@ -35,20 +36,41 @@ export function App() {
   const hidden = (listeners?.length ?? 0) - rows.length;
   const live = listeners !== null && !failed;
 
+  const runStop = useCallback(
+    (target: Listener) => {
+      const key = rowKey(target);
+      setStopping((current) => new Set(current).add(key));
+      void killPid(target.pid)
+        .catch(() => ({ ok: false, message: "Can't reach whoport server." }))
+        .then((result) => {
+          setStopping((current) => {
+            const next = new Set(current);
+            next.delete(key);
+            return next;
+          });
+          if (result.ok) {
+            setFading((current) => new Set(current).add(key));
+            window.setTimeout(retry, 200);
+            return;
+          }
+          setToast(result.message);
+        });
+    },
+    [retry],
+  );
+
+  const requestStop = (row: Listener): void => {
+    if (needsConfirm(row)) setPending(row);
+    else runStop(row);
+  };
+
   const cancelStop = useCallback(() => setPending(null), []);
   const confirmStop = useCallback(() => {
     const target = pendingRef.current;
     if (!target) return;
     setPending(null);
-    void killPid(target.pid).then((result) => {
-      if (result.ok) {
-        setFading((current) => new Set(current).add(rowKey(target)));
-        window.setTimeout(retry, 200);
-        return;
-      }
-      setToast(result.message);
-    });
-  }, [retry]);
+    runStop(target);
+  }, [runStop]);
 
   const copyStop = async (row: Listener): Promise<void> => {
     const command = dockerStopCommand(row);
@@ -66,7 +88,7 @@ export function App() {
     <div className="min-h-screen">
       <Header tally={tally} live={live} />
       {failed ? <Banner onRetry={retry} /> : null}
-      <Toolbar filter={filter} systemCount={tally.system} onChange={setFilter} />
+      <Toolbar filter={filter} otherCount={tally.other} systemCount={tally.system} onChange={setFilter} />
       {listeners === null ? (
         <Skeleton />
       ) : (
@@ -76,9 +98,10 @@ export function App() {
           pagePort={pagePort()}
           openKey={openKey}
           fading={fading}
+          stopping={stopping}
           copiedKey={copiedKey}
           onToggle={(key) => setOpenKey((current) => (current === key ? null : key))}
-          onStop={setPending}
+          onStop={requestStop}
           onCopy={(row) => {
             void copyStop(row);
           }}

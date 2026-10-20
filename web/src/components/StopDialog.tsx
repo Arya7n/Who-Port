@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { processName, projectLabel } from "../classify.js";
+import { OTHER_NOTE, processName, projectLabel } from "../classify.js";
 import type { Listener } from "../types.js";
 
 export function StopDialog({
@@ -70,6 +70,10 @@ export function StopDialog({
         </h2>
         <dl className="mt-3 space-y-1 text-sm">
           <div className="flex gap-2">
+            <dt className="w-16 text-[var(--muted)]">Process</dt>
+            <dd>{processName(row)}</dd>
+          </div>
+          <div className="flex gap-2">
             <dt className="w-16 text-[var(--muted)]">PID</dt>
             <dd className="font-mono">{row.pid}</dd>
           </div>
@@ -78,6 +82,7 @@ export function StopDialog({
             <dd>{project ?? "unknown"}</dd>
           </div>
         </dl>
+        {row.kind === "other" ? <p className="mt-3 text-sm font-medium">{OTHER_NOTE}</p> : null}
         <p className="mt-3 text-sm">{row.verdict}</p>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="h-8 rounded border border-[var(--line)] px-3 text-sm">
