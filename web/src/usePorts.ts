@@ -8,6 +8,7 @@ const POLL_MS = 2000;
 export interface PortsState {
   listeners: Listener[] | null;
   failed: boolean;
+  updatedAt: Date | null;
   retry: () => void;
 }
 
@@ -15,6 +16,7 @@ export interface PortsState {
 export function usePorts(): PortsState {
   const [listeners, setListeners] = useState<Listener[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [tick, setTick] = useState(0);
 
   const retry = useCallback(() => {

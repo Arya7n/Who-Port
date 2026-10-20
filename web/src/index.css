@@ -1,32 +1,53 @@
 @import "tailwindcss";
 
+/* Semantic colors as Tailwind tokens: bg-surface, text-muted, border-line, text-dev, ... */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-dev: var(--dev);
+  --color-docker: var(--docker);
+  --color-other: var(--other);
+  --color-system: var(--system);
+  --color-danger: var(--danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+}
+
 :root {
   color-scheme: light;
-  --bg: #f4f2ee;
-  --surface: #fffcf8;
-  --ink: #1c1917;
-  --muted: #6f675f;
-  --line: #e4dfd6;
-  --dev: #1f7a4d;
-  --docker: #8a5a00;
-  --system: #9d342c;
-  --other: #5c6470;
-  --focus: #1c1917;
+  --bg: #f6f6f7;
+  --surface: #ffffff;
+  --subtle: #f4f4f5;
+  --ink: #18181b;
+  --muted: #71717a;
+  --line: #e4e4e7;
+  --dev: #059669;
+  --docker: #0284c7;
+  --other: #64748b;
+  --system: #e11d48;
+  --danger: #dc2626;
+  --focus: #2563eb;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #12110f;
-    --surface: #1c1b18;
-    --ink: #f4f1ea;
-    --muted: #a8a095;
-    --line: #34322c;
-    --dev: #8fd0aa;
-    --docker: #e4b65a;
-    --system: #f0a29a;
-    --other: #b3bac4;
-    --focus: #f4f1ea;
+    --bg: #09090b;
+    --surface: #131316;
+    --subtle: #1c1c21;
+    --ink: #fafafa;
+    --muted: #a1a1aa;
+    --line: #27272a;
+    --dev: #34d399;
+    --docker: #38bdf8;
+    --other: #94a3b8;
+    --system: #fb7185;
+    --danger: #f87171;
+    --focus: #60a5fa;
   }
 }
 
@@ -35,12 +56,84 @@ body {
   min-width: 700px;
   background: var(--bg);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--focus) 30%, transparent);
+}
+
+/* A tinted badge in the row's kind color. The text tag keeps kind readable without color. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--badge);
+  background: color-mix(in srgb, var(--badge) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--badge) 22%, transparent);
+}
+
+@keyframes whoport-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--subtle) 25%, var(--line) 50%, var(--subtle) 75%);
+  background-size: 200% 100%;
+  animation: whoport-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes whoport-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pop-in {
+  animation: whoport-pop 160ms ease-out;
+}
+
+@keyframes whoport-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: whoport-fade 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer,
+  .pop-in,
+  .fade-in,
+  .animate-ping {
+    animation: none;
+  }
 }
