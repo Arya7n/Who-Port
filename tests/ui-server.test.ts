@@ -12,6 +12,7 @@ import type { ProcessDetails, ProjectFs } from "../src/resolve.js";
 import type { SnapshotSource } from "../src/snapshot.js";
 import {
   isAllowedHost,
+  isAllowedOrigin,
   MAX_KILL_BODY_BYTES,
   parseKillRequest,
   planKill,
@@ -81,7 +82,7 @@ function options(overrides: Partial<UiServerOptions> = {}): UiServerOptions {
 function request(
   port: number,
   init: { path?: string; method?: string; host?: string; headers?: Record<string, string>; body?: string | Buffer } = {},
-): Promise<{ status: number; body: string }> {
+): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
       {
@@ -97,13 +98,19 @@ function request(
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
+        res.on("end", () =>
+          resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8"), headers: res.headers }),
+        );
       },
     );
     req.on("error", reject);
     if (init.body !== undefined) req.write(init.body);
     req.end();
   });
+}
+
+function allowsCrossOrigin(headers: http.IncomingHttpHeaders): boolean {
+  return Object.keys(headers).some((name) => name.toLowerCase().startsWith("access-control-allow"));
 }
 
 async function withServer(opts: UiServerOptions, fn: (port: number) => Promise<void>): Promise<void> {
@@ -126,6 +133,15 @@ test("accepts only the bound loopback host", () => {
   assert.equal(isAllowedHost("evil.example", 4747), false);
   assert.equal(isAllowedHost("evil.example:4747", 4747), false);
   assert.equal(isAllowedHost(undefined, 4747), false);
+});
+
+test("a POST origin must be this server when the header is present", () => {
+  assert.equal(isAllowedOrigin(undefined, 4747), true);
+  assert.equal(isAllowedOrigin("http://127.0.0.1:4747", 4747), true);
+  assert.equal(isAllowedOrigin("http://localhost:4747", 4747), true);
+  assert.equal(isAllowedOrigin("http://evil.example", 4747), false);
+  assert.equal(isAllowedOrigin("https://127.0.0.1:4747", 4747), false);
+  assert.equal(isAllowedOrigin("http://127.0.0.1:4747/", 4747), false);
 });
 
 test("rejects a kill body that is not JSON, too big, or not a positive integer pid", () => {
@@ -344,6 +360,43 @@ test("stops a dev pid that is still listening on the second lookup", async () =>
       assert.deepEqual(calls, ["term 18432"]);
     },
   );
+});
+
+test("a foreign Origin is forbidden and no route sends CORS headers", async () => {
+  const calls: string[] = [];
+  await withServer(options({ runner: runner(calls) }), async (port) => {
+    const foreign = await request(port, {
+      path: "/api/kill",
+      method: "POST",
+      headers: { origin: "http://evil.example", "content-type": "application/json" },
+      body: '{"pid":18432}',
+    });
+    assert.equal(foreign.status, 403);
+    assert.deepEqual(JSON.parse(foreign.body), { error: "Forbidden." });
+    assert.equal(allowsCrossOrigin(foreign.headers), false);
+    assert.deepEqual(calls, []);
+
+    const local = await request(port, {
+      path: "/api/kill",
+      method: "POST",
+      headers: { origin: `http://127.0.0.1:${port}`, "content-type": "application/json" },
+      body: '{"pid":18432}',
+    });
+    assert.equal(local.status, 200);
+    assert.equal(allowsCrossOrigin(local.headers), false);
+
+    const page = await request(port, { path: "/" });
+    assert.equal(page.status, 200);
+    assert.equal(allowsCrossOrigin(page.headers), false);
+
+    const ports = await request(port, { path: "/api/ports", headers: { origin: "http://evil.example" } });
+    assert.equal(ports.status, 200);
+    assert.equal(allowsCrossOrigin(ports.headers), false);
+
+    const missing = await request(port, { path: "/missing" });
+    assert.equal(missing.status, 404);
+    assert.equal(allowsCrossOrigin(missing.headers), false);
+  });
 });
 
 test("unknown routes are JSON 404 and a handler error does not leak its stack", async () => {

@@ -28,6 +28,15 @@ export function isAllowedHost(header: string | undefined, port: number): boolean
   return host === `${UI_HOST}:${port}` || host === `localhost:${port}`;
 }
 
+/** A missing Origin is a non-browser client. A present Origin must be this server. */
+export function isAllowedOrigin(header: string | string[] | undefined, port: number): boolean {
+  if (header === undefined) return true;
+  if (Array.isArray(header)) return false;
+  const origin = header.trim().toLowerCase();
+  if (origin.length === 0) return false;
+  return origin === `http://${UI_HOST}:${port}` || origin === `http://localhost:${port}`;
+}
+
 function mediaType(header: string | undefined): string {
   return header?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }
@@ -218,6 +227,11 @@ async function killResponse(options: ResolvedUi, pid: number): Promise<{ status:
 async function handle(req: IncomingMessage, res: ServerResponse, options: ResolvedUi, boundPort: () => number): Promise<void> {
   if (!isAllowedHost(req.headers.host, boundPort())) {
     sendJson(res, 403, { error: "Forbidden." });
+    return;
+  }
+  if (req.method === "POST" && !isAllowedOrigin(req.headers.origin, boundPort())) {
+    sendJson(res, 403, { error: "Forbidden." });
+    req.resume();
     return;
   }
 
