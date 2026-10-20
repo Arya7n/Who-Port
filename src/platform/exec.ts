@@ -14,6 +14,11 @@ export interface ToolFailure {
 
 export type ToolResult = ToolSuccess | ToolFailure;
 
+export interface RunToolOptions {
+  /** Replaces the child environment. Callers must spread `process.env` themselves. */
+  env?: NodeJS.ProcessEnv;
+}
+
 /**
  * Windows console tools sometimes write UTF-16 LE when stdout is a pipe.
  * This machine's netstat/tasklist are ASCII, but a NUL-padded buffer would
@@ -40,7 +45,7 @@ export function decodeToolOutput(buf: Buffer): string {
  * execFile, never exec: arguments are passed as an array, so a port or PID
  * cannot be interpreted by a shell.
  */
-export function runTool(file: string, args: readonly string[]): Promise<ToolResult> {
+export function runTool(file: string, args: readonly string[], options: RunToolOptions = {}): Promise<ToolResult> {
   return new Promise((resolve) => {
     execFile(
       file,
@@ -49,6 +54,7 @@ export function runTool(file: string, args: readonly string[]): Promise<ToolResu
         windowsHide: true,
         timeout: 15_000,
         maxBuffer: 16 * 1024 * 1024,
+        ...(options.env ? { env: options.env } : {}),
       },
       (error, stdout, stderr) => {
         const out = Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout ?? "");
