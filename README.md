@@ -6,7 +6,7 @@ I start a Nest service and get `EADDRINUSE: port 3000`. Then I copy a PID out of
 
 ## What I built
 
-`whoport` names the listener, the project (nearest `package.json` or `.git`), how long it has been up, and the container when Docker published the port. `whoport 3000 --kill` asks before stopping anything. `whoport` with no arguments lists every listening TCP port and lets me pick a row.
+`whoport` names the listener, the project (nearest `package.json` or `.git`), how long it has been up, and the container when Docker published the port. `whoport 3000 --kill` asks before stopping anything. With no arguments it lists every listening TCP port. `whoport watch 3000` prints a line when that owner changes.
 
 ```
 port 6380
@@ -29,4 +29,4 @@ I parse `netstat`, `ss`, and `lsof` text instead of shipping native bindings. I 
 
 ## What I'd do next
 
-`whoport watch 3000`, so the terminal tells me when the port frees. A localhost page only if I still want a table I can click.
+A localhost page, if I still want a table I can click.

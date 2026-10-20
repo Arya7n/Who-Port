@@ -21,8 +21,9 @@ import type { ListenerQuery } from "./platform/types.js";
 import { parsePort, PortError } from "./port.js";
 import { formatKillJson, formatListenersJson, formatPortReport, formatTable, useColor } from "./report.js";
 import { nodeProjectFs, readProcesses, type ProcessDetails, type ProjectFs } from "./resolve.js";
+import { parseInterval, parseTimeoutSeconds, snapshotFromViews, watchPort } from "./watch.js";
 
-const USAGE = "Usage: whoport [port] [--all] [--json] [--kill] [--yes]";
+const USAGE = "Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]";
 
 export interface CliIO {
   log: (message: string) => void;
@@ -40,6 +41,7 @@ export interface CliDeps {
   ask: (prompt: string) => Promise<string>;
   color: boolean;
   projectFs: ProjectFs;
+  sleep: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
 const defaultIO: CliIO = {
@@ -84,6 +86,7 @@ function helpText(): string {
     "  whoport <port> --kill   stop it after confirmation",
     "  whoport --all           table of listening TCP ports",
     "  whoport --json          machine-readable output",
+    "  whoport watch <port>    print when the owner changes",
     "",
     "The port must be an integer from 1 to 65535.",
   ].join("\n");
@@ -102,6 +105,7 @@ function makeDeps(overrides: Partial<CliDeps>): CliDeps {
     ask,
     color: useColor(process.env, isTTY),
     projectFs: nodeProjectFs,
+    sleep: abortableSleep,
   };
   if (overrides.listListeners) deps.listListeners = overrides.listListeners;
   if (overrides.readProcesses) deps.readProcesses = overrides.readProcesses;
@@ -112,7 +116,26 @@ function makeDeps(overrides: Partial<CliDeps>): CliDeps {
   if (overrides.ask) deps.ask = overrides.ask;
   if (overrides.projectFs) deps.projectFs = overrides.projectFs;
   if (overrides.color !== undefined) deps.color = overrides.color;
+  if (overrides.sleep) deps.sleep = overrides.sleep;
   return deps;
+}
+
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", finish);
+      resolve();
+    }, ms);
+    const finish = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal.addEventListener("abort", finish, { once: true });
+  });
 }
 
 async function loadViews(deps: CliDeps, port: number | null, io: CliIO): Promise<PortView[] | null> {
@@ -257,6 +280,75 @@ async function interactive(views: readonly PortView[], deps: CliDeps, io: CliIO)
   return stopPort(view.port, [view], deps, false, io, false);
 }
 
+interface WatchFlags {
+  kill: boolean;
+  yes: boolean;
+  all: boolean;
+  json: boolean;
+  untilFree: boolean;
+  intervalRaw: string | undefined;
+  timeoutRaw: string | undefined;
+}
+
+async function commandWatch(positionals: readonly string[], flags: WatchFlags, deps: CliDeps, io: CliIO): Promise<number> {
+  const rawPort = positionals[1];
+  if (rawPort === undefined || positionals.length !== 2) {
+    io.error("Usage: whoport watch <port>");
+    return 1;
+  }
+  if (flags.kill || flags.yes || flags.all || flags.json) {
+    io.error("watch only accepts --interval, --until-free, and --timeout.");
+    return 1;
+  }
+
+  let port: number;
+  try {
+    port = parsePort(rawPort);
+  } catch (error) {
+    io.error(error instanceof PortError ? error.message : "Invalid port.");
+    return 1;
+  }
+
+  let intervalMs: number;
+  let timeoutMs: number | null;
+  try {
+    intervalMs = parseInterval(flags.intervalRaw);
+    timeoutMs = parseTimeoutSeconds(flags.timeoutRaw);
+  } catch (error) {
+    io.error(error instanceof Error ? error.message : "Invalid watch option.");
+    return 1;
+  }
+
+  // SIGINT is handled here so Ctrl+C returns 0 instead of a stack trace.
+  const controller = new AbortController();
+  const onSigint = (): void => {
+    controller.abort();
+  };
+  process.on("SIGINT", onSigint);
+  try {
+    return await watchPort({
+      port,
+      intervalMs,
+      untilFree: flags.untilFree,
+      timeoutMs,
+      color: deps.color,
+      now: deps.now,
+      sleep: (ms) => deps.sleep(ms, controller.signal),
+      signal: controller.signal,
+      log: (line) => {
+        io.log(line);
+      },
+      sample: async () => {
+        const views = await loadViews(deps, port, io);
+        if (views === null) return null;
+        return snapshotFromViews(views);
+      },
+    });
+  } finally {
+    process.off("SIGINT", onSigint);
+  }
+}
+
 export async function main(argv: readonly string[], io: CliIO = defaultIO, overrides: Partial<CliDeps> = {}): Promise<number> {
   const deps = makeDeps(overrides);
   let help = false;
@@ -264,6 +356,9 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
   let yes = false;
   let all = false;
   let json = false;
+  let untilFree = false;
+  let intervalRaw: string | undefined;
+  let timeoutRaw: string | undefined;
   let positionals: string[] = [];
 
   try {
@@ -275,6 +370,9 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
         yes: { type: "boolean" },
         all: { type: "boolean" },
         json: { type: "boolean" },
+        interval: { type: "string" },
+        "until-free": { type: "boolean" },
+        timeout: { type: "string" },
       },
       allowPositionals: true,
       strict: true,
@@ -284,6 +382,9 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
     yes = parsed.values.yes === true;
     all = parsed.values.all === true;
     json = parsed.values.json === true;
+    untilFree = parsed.values["until-free"] === true;
+    intervalRaw = parsed.values.interval;
+    timeoutRaw = parsed.values.timeout;
     positionals = parsed.positionals;
   } catch {
     io.error(`Unknown argument.\n${USAGE}`);
@@ -293,6 +394,15 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
   if (help) {
     io.log(helpText());
     return 0;
+  }
+
+  if (positionals[0] === "watch") {
+    return commandWatch(positionals, { kill, yes, all, json, untilFree, intervalRaw, timeoutRaw }, deps, io);
+  }
+
+  if (intervalRaw !== undefined || untilFree || timeoutRaw !== undefined) {
+    io.error(`--interval, --until-free, and --timeout are only for watch.\n${USAGE}`);
+    return 1;
   }
   if (yes && !kill) {
     io.error(`--yes only applies to --kill.\n${USAGE}`);

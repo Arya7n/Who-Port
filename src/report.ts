@@ -25,6 +25,11 @@ function paint(enabled: boolean, code: string, text: string): string {
   return `\x1b[${code}m${text}${RESET}`;
 }
 
+/** Dim secondary text. Callers pass `useColor` so a pipe or NO_COLOR stays plain. */
+export function dim(enabled: boolean, text: string): string {
+  return paint(enabled, "2", text);
+}
+
 function tone(view: PortView): string | null {
   if (view.docker) return "33";
   if (view.pid === 0) return null;
