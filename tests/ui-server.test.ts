@@ -362,6 +362,61 @@ test("stops a dev pid that is still listening on the second lookup", async () =>
   );
 });
 
+test("a confirmed stop forces a process Windows will not stop gracefully", async () => {
+  const calls: string[] = [];
+  const windowless: ProcessRunner = {
+    async terminate(pid: number) {
+      calls.push(`term ${pid}`);
+      return { ok: false, reason: "needs-force", message: "Windows will only stop this process by force." };
+    },
+    async force(pid: number) {
+      calls.push(`force ${pid}`);
+      return { ok: true };
+    },
+    async running() {
+      return false;
+    },
+  };
+  await withServer(options({ runner: windowless }), async (port) => {
+    const response = await request(port, {
+      path: "/api/kill",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"pid":18432}',
+    });
+    assert.equal(response.status, 200);
+    assert.equal(JSON.parse(response.body).ok, true);
+    assert.deepEqual(calls, ["term 18432", "force 18432"]);
+  });
+});
+
+test("access denied is worded for the browser", async () => {
+  const denied: ProcessRunner = {
+    async terminate() {
+      return { ok: false, reason: "denied", message: "Access denied. Open the terminal as Administrator and try again." };
+    },
+    async force() {
+      return { ok: true };
+    },
+    async running() {
+      return true;
+    },
+  };
+  await withServer(options({ runner: denied }), async (port) => {
+    const response = await request(port, {
+      path: "/api/kill",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"pid":18432}',
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(JSON.parse(response.body), {
+      ok: false,
+      message: "Access denied. This process belongs to another user or a Windows service.",
+    });
+  });
+});
+
 test("POST /api/kill checks Host and Origin before it looks up a pid", async () => {
   let listed = 0;
   await withServer(

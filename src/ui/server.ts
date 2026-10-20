@@ -271,8 +271,12 @@ async function killResponse(options: ResolvedUi, pid: number): Promise<{ status:
   const current = planKill(again.views, pid);
   if (current.action !== "stop") return { status: current.status, body: current.body };
 
-  const result = await stopProcess(pid, options.runner, options.sleep ? { force: false, sleep: options.sleep } : { force: false });
+  // The dashboard's Stop dialog is the confirmation, so a process that ignores a graceful stop is forced.
+  const result = await stopProcess(pid, options.runner, options.sleep ? { force: true, sleep: options.sleep } : { force: true });
   if (result.status === "stopped") return { status: 200, body: { ok: true, message: result.message } };
+  if (result.status === "denied") {
+    return { status: 409, body: { ok: false, message: "Access denied. This process belongs to another user or a Windows service." } };
+  }
   return { status: 409, body: { ok: false, message: result.message } };
 }
 

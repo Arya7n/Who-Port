@@ -3,7 +3,7 @@ import { win32 } from "node:path";
 import { runTool } from "./platform/exec.js";
 import { parseTasklist } from "./platform/win32.js";
 
-export type ControlReason = "denied" | "gone" | "invalid" | "failed";
+export type ControlReason = "denied" | "gone" | "invalid" | "needs-force" | "failed";
 
 export type ControlResult = { ok: true } | { ok: false; reason: ControlReason; message: string };
 
@@ -106,6 +106,10 @@ export function classifyTaskkill(exitCode: number | null, output: string): Contr
   if (/invalid/i.test(text)) {
     return { ok: false, reason: "invalid", message: "That PID is not valid." };
   }
+  // A process with no window (most console dev servers) ignores a graceful taskkill.
+  if (/terminated forcefully/i.test(text)) {
+    return { ok: false, reason: "needs-force", message: "Windows will only stop this process by force." };
+  }
   return { ok: false, reason: "failed", message: text.length > 0 ? text : "taskkill failed." };
 }
 
@@ -119,6 +123,10 @@ export async function stopProcess(pid: number, runner: ProcessRunner, options?: 
   const sleep = options?.sleep ?? defaultSleep;
 
   const ended = await runner.terminate(pid);
+  if (!ended.ok && ended.reason === "needs-force") {
+    if (!force) return { status: "still-running", forced: false, message: `PID ${pid} can only be stopped by force.` };
+    return forceStop(pid, runner);
+  }
   if (!ended.ok) return { status: ended.reason, forced: false, message: ended.message };
 
   let alive = await runner.running(pid);
@@ -130,7 +138,10 @@ export async function stopProcess(pid: number, runner: ProcessRunner, options?: 
 
   if (!alive) return { status: "stopped", forced: false, message: `Stopped PID ${pid}.` };
   if (!force) return { status: "still-running", forced: false, message: `PID ${pid} is still running.` };
+  return forceStop(pid, runner);
+}
 
+async function forceStop(pid: number, runner: ProcessRunner): Promise<StopResult> {
   const forced = await runner.force(pid);
   if (forced.ok || (!forced.ok && forced.reason === "gone")) {
     return { status: "stopped", forced: true, message: `PID ${pid} did not exit. Forced it to stop.` };

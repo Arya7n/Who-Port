@@ -58,6 +58,24 @@ test("does not force a process that is still running unless asked", async () => 
   assert.equal(fake.forced, 0);
 });
 
+test("forces a windowless process that refuses a graceful taskkill", async () => {
+  const output = "ERROR: The process with PID 11476 could not be terminated.\nReason: This process can only be terminated forcefully (with /F option).";
+  const refused = classifyTaskkill(1, output);
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.equal(refused.reason, "needs-force");
+
+  const confirmed = runner({ terminate: refused, force: { ok: true } });
+  const result = await stopProcess(11476, confirmed, { force: true, waitMs: 0, sleep: async () => {} });
+  assert.equal(result.status, "stopped");
+  assert.equal(result.forced, true);
+  assert.equal(confirmed.forced, 1);
+
+  const unconfirmed = runner({ terminate: refused });
+  const left = await stopProcess(11476, unconfirmed, { force: false, waitMs: 0, sleep: async () => {} });
+  assert.deepEqual(left, { status: "still-running", forced: false, message: "PID 11476 can only be stopped by force." });
+  assert.equal(unconfirmed.forced, 0);
+});
+
 test("reports access denied without forcing", async () => {
   const fake = runner({
     terminate: { ok: false, reason: "denied", message: "Access denied. Open the terminal as Administrator and try again." },
