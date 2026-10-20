@@ -9,6 +9,7 @@ export interface ToolFailure {
   ok: false;
   missing: boolean;
   denied: boolean;
+  exitCode: number | null;
   message: string;
 }
 
@@ -64,16 +65,17 @@ export function runTool(file: string, args: readonly string[], options: RunToolO
           return;
         }
 
-        const code = (error as NodeJS.ErrnoException).code;
+        const code = (error as NodeJS.ErrnoException & { code?: string | number }).code;
         const missing = code === "ENOENT";
         const denied =
           code === "EPERM" ||
           code === "EACCES" ||
           /access is denied/i.test(errText) ||
           /access is denied/i.test(error.message);
+        const exitCode = typeof code === "number" ? code : null;
 
         const detail = errText.trim() || error.message;
-        resolve({ ok: false, missing, denied, message: detail });
+        resolve({ ok: false, missing, denied, exitCode, message: detail });
       },
     );
   });
