@@ -362,6 +362,55 @@ test("stops a dev pid that is still listening on the second lookup", async () =>
   );
 });
 
+test("POST /api/kill checks Host and Origin before it looks up a pid", async () => {
+  let listed = 0;
+  await withServer(
+    options({
+      source: {
+        ...source([]),
+        listListeners: async () => {
+          listed += 1;
+          return { listeners: [], warnings: [] };
+        },
+      },
+    }),
+    async (port) => {
+      const kill = (headers?: Record<string, string>, host?: string) =>
+        request(port, {
+          path: "/api/kill",
+          method: "POST",
+          ...(host ? { host } : {}),
+          headers: { "content-type": "application/json", ...headers },
+          body: '{"pid":99999}',
+        });
+
+      const evil = await kill({ origin: "http://evil.example" });
+      assert.equal(evil.status, 403);
+      assert.deepEqual(JSON.parse(evil.body), { error: "Forbidden." });
+      assert.equal(allowsCrossOrigin(evil.headers), false);
+      assert.equal(listed, 0);
+
+      const matched = await kill({ origin: `http://127.0.0.1:${port}` });
+      assert.equal(matched.status, 409);
+      assert.match(matched.body, /PID 99999 is not listening/);
+      assert.equal(allowsCrossOrigin(matched.headers), false);
+      assert.equal(listed, 1);
+
+      const bare = await kill();
+      assert.equal(bare.status, 409);
+      assert.match(bare.body, /PID 99999 is not listening/);
+      assert.equal(allowsCrossOrigin(bare.headers), false);
+
+      const seen = listed;
+      const badHost = await kill({ origin: "http://evil.example" }, "evil.example");
+      assert.equal(badHost.status, 403);
+      assert.deepEqual(JSON.parse(badHost.body), { error: "Forbidden." });
+      assert.equal(allowsCrossOrigin(badHost.headers), false);
+      assert.equal(listed, seen);
+    },
+  );
+});
+
 test("a foreign Origin is forbidden and no route sends CORS headers", async () => {
   const calls: string[] = [];
   await withServer(options({ runner: runner(calls) }), async (port) => {

@@ -1,0 +1,314 @@
+{
+  "listeners": [
+    {
+      "port": 135,
+      "pid": 1524,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "svchost.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:02.825Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "svchost.exe is a system process (PID 1524). Stopping it can take down the machine."
+    },
+    {
+      "port": 139,
+      "pid": 4,
+      "addresses": [
+        "10.19.209.182",
+        "172.24.192.1"
+      ],
+      "command": "System",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:28:54.428Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "System is a system process (PID 4). Stopping it can take down the machine."
+    },
+    {
+      "port": 445,
+      "pid": 4,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "System",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:28:54.428Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "System is a system process (PID 4). Stopping it can take down the machine."
+    },
+    {
+      "port": 4747,
+      "pid": 9076,
+      "addresses": [
+        "127.0.0.1"
+      ],
+      "command": "node.exe",
+      "commandLine": "\"C:\\Program Files\\nodejs\\node.exe\" --require C:\\Users\\Aryan\\code\\Who-Port\\node_modules\\tsx\\dist\\preflight.cjs --import file:///C:/Users/Aryan/code/Who-Port/node_modules/tsx/dist/loader.mjs src/ui/server.ts",
+      "executablePath": "C:\\Program Files\\nodejs\\node.exe",
+      "startedAt": "2026-10-20T10:39:58.829Z",
+      "uptime": "1m ago",
+      "project": {
+        "name": "whoport",
+        "root": "C:\\Users\\Aryan\\code\\Who-Port"
+      },
+      "docker": null,
+      "protected": false,
+      "verdict": "Looks like node.exe from whoport (1m ago). Safe to stop."
+    },
+    {
+      "port": 5040,
+      "pid": 8980,
+      "addresses": [
+        "0.0.0.0"
+      ],
+      "command": "svchost.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:17.495Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "svchost.exe is a system process (PID 8980). Stopping it can take down the machine."
+    },
+    {
+      "port": 5432,
+      "pid": 13128,
+      "addresses": [
+        "0.0.0.0",
+        "127.0.0.1",
+        "::",
+        "::1"
+      ],
+      "command": "com.docker.backend.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:56:50.715Z",
+      "uptime": "1h ago",
+      "project": null,
+      "docker": {
+        "name": "patent-dev-postgres-1",
+        "image": "pgvector/pgvector:pg16",
+        "project": "patent-dev",
+        "service": "postgres"
+      },
+      "protected": true,
+      "verdict": "Docker container patent-dev-postgres-1 (pgvector/pgvector:pg16), compose patent-dev/postgres. Stop it with docker stop patent-dev-postgres-1."
+    },
+    {
+      "port": 6379,
+      "pid": 5752,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "redis-server.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:08.010Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": false,
+      "verdict": "Looks like redis-server.exe (PID 5752). Project unknown. Check the command before stopping."
+    },
+    {
+      "port": 7680,
+      "pid": 15796,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "svchost.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:31:21.202Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "svchost.exe is a system process (PID 15796). Stopping it can take down the machine."
+    },
+    {
+      "port": 24830,
+      "pid": 5124,
+      "addresses": [
+        "127.0.0.1"
+      ],
+      "command": "AsusSoftwareManager.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:06.846Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": false,
+      "verdict": "Looks like AsusSoftwareManager.exe (PID 5124). Project unknown. Check the command before stopping."
+    },
+    {
+      "port": 27017,
+      "pid": 7464,
+      "addresses": [
+        "127.0.0.1"
+      ],
+      "command": "mongod.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:13.645Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": false,
+      "verdict": "Looks like mongod.exe (PID 7464). Project unknown. Check the command before stopping."
+    },
+    {
+      "port": 49664,
+      "pid": 1188,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "lsass.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:01.027Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "lsass.exe is a system process (PID 1188). Stopping it can take down the machine."
+    },
+    {
+      "port": 49665,
+      "pid": 964,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "wininit.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:00.548Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "wininit.exe is a system process (PID 964). Stopping it can take down the machine."
+    },
+    {
+      "port": 49666,
+      "pid": 2320,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "svchost.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:03.601Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "svchost.exe is a system process (PID 2320). Stopping it can take down the machine."
+    },
+    {
+      "port": 49667,
+      "pid": 2848,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "svchost.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:03.946Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "svchost.exe is a system process (PID 2848). Stopping it can take down the machine."
+    },
+    {
+      "port": 49668,
+      "pid": 2880,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "spoolsv.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:05.920Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "spoolsv.exe is a system process (PID 2880). Stopping it can take down the machine."
+    },
+    {
+      "port": 49669,
+      "pid": 5504,
+      "addresses": [
+        "::1"
+      ],
+      "command": "jhi_service.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:07.146Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": false,
+      "verdict": "Looks like jhi_service.exe (PID 5504). Project unknown. Check the command before stopping."
+    },
+    {
+      "port": 49670,
+      "pid": 1152,
+      "addresses": [
+        "0.0.0.0",
+        "::"
+      ],
+      "command": "services.exe",
+      "commandLine": null,
+      "executablePath": null,
+      "startedAt": "2026-10-20T08:29:00.890Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": true,
+      "verdict": "services.exe is a system process (PID 1152). Stopping it can take down the machine."
+    },
+    {
+      "port": 50789,
+      "pid": 9700,
+      "addresses": [
+        "0.0.0.0"
+      ],
+      "command": "SpotifyLauncher.exe",
+      "commandLine": "\"C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.305.3058.0_x64__zpdnekdrzrea0\\SpotifyLauncher.exe\" /InvokerPRAID: Spotify --session-connected-task",
+      "executablePath": "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.305.3058.0_x64__zpdnekdrzrea0\\SpotifyLauncher.exe",
+      "startedAt": "2026-10-20T08:29:37.553Z",
+      "uptime": "2h ago",
+      "project": null,
+      "docker": null,
+      "protected": false,
+      "verdict": "Looks like SpotifyLauncher.exe (PID 9700). Project unknown. Check the command before stopping."
+    }
+  ]
+}
