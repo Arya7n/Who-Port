@@ -91,14 +91,39 @@ test("classifies taskkill failures", () => {
   if (!invalid.ok) assert.equal(invalid.reason, "invalid");
 });
 
-test("treats system, service-host, and Docker forwarders as protected", () => {
-  assert.equal(isProtectedProcess(4, "System"), true);
+test("treats Windows system images, Docker forwarders, and SystemRoot binaries as protected", () => {
+  const names = [
+    "System",
+    "Registry",
+    "smss.exe",
+    "csrss.exe",
+    "wininit.exe",
+    "winlogon.exe",
+    "services.exe",
+    "lsass.exe",
+    "lsm.exe",
+    "svchost.exe",
+    "spoolsv.exe",
+    "fontdrvhost.exe",
+    "dwm.exe",
+    "MsMpEng.exe",
+    "com.docker.backend.exe",
+    "wslrelay.exe",
+    "docker-proxy",
+    "docker-proxy.exe",
+  ];
+  for (const name of names) {
+    assert.equal(isProtectedProcess(800, name), true, name);
+    assert.equal(isProtectedProcess(800, name.toUpperCase()), true, name);
+    assert.equal(isProtectedProcess(800, `C:\\Windows\\System32\\${name}`), true, name);
+  }
+  assert.equal(isProtectedProcess(4, "node.exe"), true);
   assert.equal(isProtectedProcess(0, ""), true);
-  assert.equal(isProtectedProcess(800, "svchost.exe"), true);
-  assert.equal(isProtectedProcess(800, "C:\\Program Files\\Docker\\Docker\\com.docker.backend.exe"), true);
-  assert.equal(isProtectedProcess(800, "wslrelay.exe"), true);
-  assert.equal(isProtectedProcess(800, "docker-proxy.exe"), true);
   assert.equal(isProtectedProcess(18432, "node.exe"), false);
+  assert.equal(isProtectedProcess(18432, "node.exe", "C:\\Program Files\\nodejs\\node.exe", "C:\\Windows"), false);
+  assert.equal(isProtectedProcess(50, "custom.exe", "C:\\Windows\\System32\\custom.exe", "C:\\Windows"), true);
+  assert.equal(isProtectedProcess(50, "custom.exe", "C:\\windows\\system32\\custom.exe", "c:\\Windows"), true);
+  assert.equal(isProtectedProcess(50, "custom.exe", "C:\\WindowsOld\\custom.exe", "C:\\Windows"), false);
 });
 
 test("accepts docker container names and rejects anything else", () => {

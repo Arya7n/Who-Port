@@ -98,7 +98,7 @@ export function planKill(views: readonly PortView[], pid: number): KillPlan {
     return refuse(409, `PID ${pid} is a container port-forwarder. Handle it from the CLI.`);
   }
 
-  if (owned.some((view) => view.protected || isProtectedProcess(view.pid, view.command))) {
+  if (owned.some((view) => view.protected || isProtectedProcess(view.pid, view.command, view.executablePath))) {
     const command = owned.find((view) => view.command.length > 0)?.command ?? "This process";
     return refuse(403, `${command} (PID ${pid}) is protected. Handle it from the CLI.`);
   }

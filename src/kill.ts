@@ -1,3 +1,5 @@
+import { win32 } from "node:path";
+
 import { runTool } from "./platform/exec.js";
 import { parseTasklist } from "./platform/win32.js";
 
@@ -25,7 +27,19 @@ export interface StopOptions {
 
 const PROTECTED_NAMES = new Set([
   "system",
+  "registry",
+  "smss.exe",
+  "csrss.exe",
+  "wininit.exe",
+  "winlogon.exe",
+  "services.exe",
+  "lsass.exe",
+  "lsm.exe",
   "svchost.exe",
+  "spoolsv.exe",
+  "fontdrvhost.exe",
+  "dwm.exe",
+  "msmpeng.exe",
   "com.docker.backend.exe",
   "wslrelay.exe",
   "docker-proxy",
@@ -40,11 +54,36 @@ function defaultSleep(ms: number): Promise<void> {
   });
 }
 
-/** System processes and Docker's own forwarders are not safe to taskkill. */
-export function isProtectedProcess(pid: number, command: string): boolean {
+function readSystemRoot(): string | null {
+  const value = process.env.SystemRoot ?? process.env.SYSTEMROOT;
+  if (value === undefined || value.trim().length === 0) return null;
+  return value;
+}
+
+/** A binary that lives in the Windows directory is a system component even if the image name is unfamiliar. */
+function isUnderSystemRoot(executablePath: string, systemRoot: string): boolean {
+  const root = win32.normalize(systemRoot).replace(/[\\/]+$/, "").toLowerCase();
+  if (root.length === 0) return false;
+  const path = win32.normalize(executablePath).toLowerCase();
+  return path === root || path.startsWith(`${root}\\`);
+}
+
+/**
+ * System processes and Docker's own forwarders are not safe to taskkill.
+ * `systemRoot` defaults to %SystemRoot% so tests can pin the directory.
+ */
+export function isProtectedProcess(
+  pid: number,
+  command: string,
+  executablePath?: string | null,
+  systemRoot?: string | null,
+): boolean {
   if (pid <= 4) return true;
   const base = command.trim().split(/[/\\]/).pop()?.toLowerCase() ?? "";
-  return PROTECTED_NAMES.has(base);
+  if (PROTECTED_NAMES.has(base)) return true;
+  const root = systemRoot === undefined ? readSystemRoot() : systemRoot;
+  if (root === null || executablePath === undefined || executablePath === null || executablePath.length === 0) return false;
+  return isUnderSystemRoot(executablePath, root);
 }
 
 export function isContainerName(name: string): boolean {

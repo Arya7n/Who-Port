@@ -49,6 +49,22 @@ test("a published container replaces the proxy as the owner", () => {
   assert.deepEqual(sharedTarget(views), { kind: "docker", name: "patent-dev-redis-1" });
 });
 
+test("a process under SystemRoot is protected and node.exe is not", () => {
+  const views = buildViews(
+    [listener({ pid: 50, command: "custom.exe", port: 1 }), listener({ pid: 60, command: "node.exe", port: 2 })],
+    new Map([
+      [50, { commandLine: null, executablePath: "C:\\Windows\\System32\\custom.exe", startTime: null, cwd: null }],
+      [60, { commandLine: null, executablePath: "C:\\Program Files\\nodejs\\node.exe", startTime: null, cwd: null }],
+    ]),
+    new Map(),
+    emptyFs(),
+    now,
+    "C:\\Windows",
+  );
+  assert.equal(views.find((view) => view.pid === 50)?.protected, true);
+  assert.equal(views.find((view) => view.pid === 60)?.protected, false);
+});
+
 test("two owners of one port are not stopped together", () => {
   const views = buildViews(
     [listener({ pid: 1, address: "127.0.0.1" }), listener({ pid: 2, address: "0.0.0.0" })],

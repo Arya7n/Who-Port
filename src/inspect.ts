@@ -85,6 +85,7 @@ export function buildViews(
   containers: ReadonlyMap<number, ContainerInfo>,
   fs: ProjectFs,
   now: Date,
+  systemRoot?: string | null,
 ): PortView[] {
   const groups = new Map<string, { listener: Listener; addresses: Set<string> }>();
 
@@ -117,7 +118,7 @@ export function buildViews(
       uptime: info?.startTime ? formatUptime(info.startTime, now) : null,
       project,
       docker,
-      protected: isProtectedProcess(listener.pid, command),
+      protected: isProtectedProcess(listener.pid, command, info?.executablePath ?? null, systemRoot),
     };
     views.push({ ...partial, verdict: describeVerdict(partial, now) });
   }
