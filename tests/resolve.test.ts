@@ -59,7 +59,7 @@ test("extracts the paths from a captured tsserver command line", () => {
   assert.ok(record);
   assert.deepEqual(extractPaths(record.commandLine ?? ""), [
     "c:\\Users\\Aryan\\AppData\\Local\\Programs\\cursor\\resources\\app\\resources\\helpers\\node.exe",
-    "c:\\Users\\Aryan\\AppData\\Local\\Programs\\cursor\\resources\\app\\extensions\\node_modules\\typescript\\lib\\tsserver.js",
+    "c:\\Users\\Aryan\\AppData\\Local\\Programs\\cursor\\resources\\app\\extensions",
     "C:\\Users\\Aryan\\AppData\\Local\\Temp\\vscode-typescript\\10e9b891934e200b813e\\tscancellation-0d44f63c32d52a0d7cab.tmp",
   ]);
 });
@@ -141,6 +141,62 @@ test("prefers the working directory over a deeper dependency package", () => {
     fs,
   );
   assert.deepEqual(project, { name: "chat-service", root: "/app" });
+});
+
+test("resolves a tsx command line to the app outside node_modules", () => {
+  const command =
+    '"C:\\Program Files\\nodejs\\node.exe" --require C:\\Users\\Aryan\\code\\Who-Port\\node_modules\\tsx\\dist\\preflight.cjs --import file:///C:/Users/Aryan/code/Who-Port/node_modules/tsx/dist/loader.mjs src/ui/server.ts';
+  const fs = memoryFs(win32, {
+    "C:\\Program Files\\nodejs": "dir",
+    "C:\\Program Files\\nodejs\\package.json": '{"name":"node"}',
+    "C:\\Users\\Aryan\\code\\Who-Port": "dir",
+    "C:\\Users\\Aryan\\code\\Who-Port\\package.json": '{"name":"whoport"}',
+    "C:\\Users\\Aryan\\code\\Who-Port\\node_modules": "dir",
+    "C:\\Users\\Aryan\\code\\Who-Port\\node_modules\\tsx": "dir",
+    "C:\\Users\\Aryan\\code\\Who-Port\\node_modules\\tsx\\package.json": '{"name":"tsx"}',
+  });
+  const paths = extractPaths(command);
+  assert.equal(paths.some((candidate) => candidate.toLowerCase().includes("node_modules")), false);
+  assert.deepEqual(
+    resolveProject(
+      {
+        cwd: null,
+        commandLine: command,
+        executablePath: "C:\\Program Files\\nodejs\\node.exe",
+      },
+      fs,
+    ),
+    { name: "whoport", root: "C:\\Users\\Aryan\\code\\Who-Port" },
+  );
+});
+
+test("returns null when the only absolute path is inside node_modules", () => {
+  const fs = memoryFs(win32, {
+    "C:\\lonely\\node_modules\\left-pad": "dir",
+    "C:\\lonely\\node_modules\\left-pad\\package.json": '{"name":"left-pad"}',
+  });
+  assert.equal(
+    resolveProject(
+      {
+        cwd: null,
+        commandLine: "node C:\\lonely\\node_modules\\left-pad\\index.js",
+        executablePath: null,
+      },
+      fs,
+    ),
+    null,
+  );
+});
+
+test("returns null when the command line has no absolute paths", () => {
+  const fs = memoryFs(win32, {
+    "C:\\Users\\Aryan\\code\\Who-Port": "dir",
+    "C:\\Users\\Aryan\\code\\Who-Port\\package.json": '{"name":"whoport"}',
+  });
+  assert.equal(
+    resolveProject({ cwd: null, commandLine: "node src/ui/server.ts", executablePath: null }, fs),
+    null,
+  );
 });
 
 test("picks the deepest command-line project when there is no working directory", () => {

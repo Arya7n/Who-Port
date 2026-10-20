@@ -1,5 +1,6 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { posix, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { runTool } from "./platform/exec.js";
 
@@ -110,8 +111,10 @@ export function extractPaths(commandLine: string): string[] {
       }
     }
 
-    if (!isAbsolutePath(token)) continue;
-    const path = stripTrailingJunk(token);
+    const raw = pathFromToken(token);
+    if (!isAbsolutePath(raw)) continue;
+    // A package.json inside node_modules belongs to the dependency, not the app.
+    const path = outsideNodeModules(raw);
     if (path.length === 0 || seen.has(path)) continue;
     seen.add(path);
     found.push(path);
@@ -122,6 +125,34 @@ export function extractPaths(commandLine: string): string[] {
 
 function pathApi(start: string): PathApi {
   return start.startsWith("/") && !start.startsWith("//") ? posix : win32;
+}
+
+function pathFromToken(token: string): string {
+  const stripped = stripTrailingJunk(token);
+  if (!/^file:/i.test(stripped)) return stripped;
+  try {
+    const url = new URL(stripped);
+    if (url.protocol !== "file:") return stripped;
+    return fileURLToPath(url);
+  } catch {
+    return stripped;
+  }
+}
+
+function hasNodeModules(dir: string, api: PathApi): boolean {
+  return api.normalize(dir).split(api.sep).some((part) => part.toLowerCase() === "node_modules");
+}
+
+/** Parent of the first node_modules segment, so the walk starts at the app rather than the dependency. */
+function outsideNodeModules(candidate: string): string {
+  const api = pathApi(candidate);
+  const normalized = api.normalize(candidate);
+  const parts = normalized.split(api.sep);
+  const at = parts.findIndex((part) => part.toLowerCase() === "node_modules");
+  if (at < 0) return normalized;
+  const modulesDir = parts.slice(0, at + 1).join(api.sep);
+  const parent = api.dirname(modulesDir.length > 0 ? modulesDir : normalized);
+  return parent.length > 0 ? parent : normalized;
 }
 
 function readPackageName(text: string | null): string | null {
@@ -141,18 +172,21 @@ function readPackageName(text: string | null): string | null {
 
 /** Walk parents until a package.json with a name, or a .git directory, appears. */
 export function findProjectRoot(start: string, fs: ProjectFs): ResolvedProject | null {
-  const api = pathApi(start);
-  let current = fs.isDirectory(start) ? start : api.dirname(start);
+  const searched = outsideNodeModules(start);
+  const api = pathApi(searched);
+  let current = fs.isDirectory(searched) ? searched : api.dirname(searched);
   const filesystemRoot = api.parse(api.normalize(current)).root;
 
   while (current.length > 0) {
     const normalized = api.normalize(current);
-    const packageName = readPackageName(fs.readFile(api.join(normalized, "package.json")));
-    if (packageName) return { name: packageName, root: normalized };
+    if (!hasNodeModules(normalized, api)) {
+      const packageName = readPackageName(fs.readFile(api.join(normalized, "package.json")));
+      if (packageName) return { name: packageName, root: normalized };
 
-    if (fs.exists(api.join(normalized, ".git"))) {
-      const name = api.basename(normalized);
-      if (name.length > 0) return { name, root: normalized };
+      if (fs.exists(api.join(normalized, ".git"))) {
+        const name = api.basename(normalized);
+        if (name.length > 0) return { name, root: normalized };
+      }
     }
 
     if (normalized === filesystemRoot) break;
