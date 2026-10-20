@@ -1,7 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { realpathSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { listContainers } from "../docker.js";
@@ -13,12 +14,23 @@ import { parsePort, PortError } from "../port.js";
 import { formatListenersJson } from "../report.js";
 import { nodeProjectFs, readProcesses } from "../resolve.js";
 import { loadPortViews, type SnapshotSource } from "../snapshot.js";
+import { classifyStaticUrl, fileInsideRoot, sameOrInside, staticCacheControl, staticContentType } from "./static.js";
 
 export const DEFAULT_UI_PORT = 4747;
 export const UI_HOST = "127.0.0.1";
 export const MAX_KILL_BODY_BYTES = 1024;
+export const UI_ASSETS_MISSING = "UI assets not built. Run npm run build.";
 
-const HTML_PATH = new URL("./index.html", import.meta.url);
+/** Compiled server sits in dist/ui. The tsx entry lives in src/ui and looks one level up. */
+export function defaultUiRoot(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  if (basename(here) === "ui" && basename(dirname(here)) === "dist") return here;
+  return resolve(here, "../../dist/ui");
+}
+
+export function uiAssetsReady(root: string): boolean {
+  return existsSync(join(root, "index.html"));
+}
 
 export function isAllowedHost(header: string | undefined, port: number): boolean {
   if (header === undefined) return false;
@@ -118,6 +130,7 @@ export interface UiServerOptions {
   source: SnapshotSource;
   runner: ProcessRunner;
   html?: () => Promise<string | null>;
+  staticRoot?: string;
   logError?: (error: unknown) => void;
   logWarning?: (message: string) => void;
   sleep?: (ms: number) => Promise<void>;
@@ -131,7 +144,8 @@ interface ResolvedUi {
   port: number;
   source: SnapshotSource;
   runner: ProcessRunner;
-  html: () => Promise<string | null>;
+  html: (() => Promise<string | null>) | null;
+  staticRoot: string | null;
   logError: (error: unknown) => void;
   logWarning: (message: string) => void;
   sleep?: (ms: number) => Promise<void>;
@@ -185,25 +199,65 @@ async function readBody(req: IncomingMessage, limit: number): Promise<Buffer | "
   });
 }
 
-async function defaultHtml(): Promise<string | null> {
-  try {
-    return await readFile(HTML_PATH, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-}
-
 function resolveOptions(options: UiServerOptions): ResolvedUi {
+  const html = options.html ?? null;
+  const staticRoot = options.staticRoot !== undefined ? options.staticRoot : html ? null : defaultUiRoot();
   return {
     port: options.port,
     source: options.source,
     runner: options.runner,
-    html: options.html ?? defaultHtml,
+    html,
+    staticRoot,
     logError: options.logError ?? ((error) => console.error(error)),
     logWarning: options.logWarning ?? ((message) => console.error(message)),
     ...(options.sleep ? { sleep: options.sleep } : {}),
   };
+}
+
+async function serveStatic(req: IncomingMessage, res: ServerResponse, root: string): Promise<boolean> {
+  const decision = classifyStaticUrl(req.url ?? "/");
+  if (decision.kind === "pass") return false;
+  if (decision.kind === "reject") {
+    sendJson(res, 404, { error: "Not found." });
+    return true;
+  }
+
+  const relativeName = decision.kind === "index" ? "index.html" : `assets/${decision.name}`;
+  const lexical = fileInsideRoot(root, relativeName);
+  if (!lexical) {
+    sendJson(res, 404, { error: "Not found." });
+    return true;
+  }
+
+  try {
+    const rootReal = await realpath(root);
+    const fileReal = await realpath(lexical);
+    if (!sameOrInside(rootReal, fileReal)) {
+      sendJson(res, 404, { error: "Not found." });
+      return true;
+    }
+    const info = await stat(fileReal);
+    if (!info.isFile()) {
+      sendJson(res, 404, { error: "Not found." });
+      return true;
+    }
+    const body = await readFile(fileReal);
+    const kind = decision.kind === "index" ? "index" : "asset";
+    res.writeHead(200, {
+      "content-type": staticContentType(fileReal),
+      "content-length": body.length,
+      "cache-control": staticCacheControl(kind),
+    });
+    if (req.method === "HEAD") res.end();
+    else res.end(body);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      sendJson(res, 404, { error: "Not found." });
+      return true;
+    }
+    throw error;
+  }
 }
 
 async function killResponse(options: ResolvedUi, pid: number): Promise<{ status: number; body: unknown }> {
@@ -235,11 +289,17 @@ async function handle(req: IncomingMessage, res: ServerResponse, options: Resolv
     return;
   }
 
+  const method = req.method ?? "GET";
+  if ((method === "GET" || method === "HEAD") && options.staticRoot) {
+    const served = await serveStatic(req, res, options.staticRoot);
+    if (served) return;
+  }
+
   const pathname = new URL(req.url ?? "/", `http://${UI_HOST}`).pathname;
-  if (req.method === "GET" && pathname === "/") {
+  if (method === "GET" && pathname === "/" && options.html) {
     const page = await options.html();
     if (page === null) {
-      sendJson(res, 404, { error: "The dashboard page is missing." });
+      sendJson(res, 404, { error: "Not found." });
       return;
     }
     sendText(res, 200, "text/html; charset=utf-8", page);
@@ -417,7 +477,14 @@ async function runFromArgv(argv: readonly string[]): Promise<number> {
     }
   }
 
+  const staticRoot = defaultUiRoot();
+  if (!uiAssetsReady(staticRoot)) {
+    console.error(UI_ASSETS_MISSING);
+    return 1;
+  }
+
   return runUiServer({
+    staticRoot,
     port,
     source: defaultSource(),
     runner: process.platform === "win32" ? windowsRunner : createPosixRunner(),

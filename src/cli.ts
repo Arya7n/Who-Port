@@ -22,9 +22,10 @@ import { parsePort, PortError } from "./port.js";
 import { formatKillJson, formatListenersJson, formatPortReport, formatTable, useColor } from "./report.js";
 import { nodeProjectFs, readProcesses, type ProcessDetails, type ProjectFs } from "./resolve.js";
 import { loadPortViews } from "./snapshot.js";
+import { defaultUiRoot, runUiServer, UI_ASSETS_MISSING, uiAssetsReady } from "./ui/server.js";
 import { parseInterval, parseTimeoutSeconds, snapshotFromViews, watchPort } from "./watch.js";
 
-const USAGE = "Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]";
+const USAGE = "Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]\n       whoport ui [--port N]";
 
 export interface CliIO {
   log: (message: string) => void;
@@ -43,6 +44,7 @@ export interface CliDeps {
   color: boolean;
   projectFs: ProjectFs;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+  staticRoot: string;
 }
 
 const defaultIO: CliIO = {
@@ -88,6 +90,7 @@ function helpText(): string {
     "  whoport --all           table of listening TCP ports",
     "  whoport --json          machine-readable output",
     "  whoport watch <port>    print when the owner changes",
+    "  whoport ui [--port N]   serve the local dashboard",
     "",
     "The port must be an integer from 1 to 65535.",
   ].join("\n");
@@ -107,6 +110,7 @@ function makeDeps(overrides: Partial<CliDeps>): CliDeps {
     color: useColor(process.env, isTTY),
     projectFs: nodeProjectFs,
     sleep: abortableSleep,
+    staticRoot: defaultUiRoot(),
   };
   if (overrides.listListeners) deps.listListeners = overrides.listListeners;
   if (overrides.readProcesses) deps.readProcesses = overrides.readProcesses;
@@ -118,6 +122,7 @@ function makeDeps(overrides: Partial<CliDeps>): CliDeps {
   if (overrides.projectFs) deps.projectFs = overrides.projectFs;
   if (overrides.color !== undefined) deps.color = overrides.color;
   if (overrides.sleep) deps.sleep = overrides.sleep;
+  if (overrides.staticRoot !== undefined) deps.staticRoot = overrides.staticRoot;
   return deps;
 }
 
@@ -278,6 +283,40 @@ async function interactive(views: readonly PortView[], deps: CliDeps, io: CliIO)
   return stopPort(view.port, [view], deps, false, io, false);
 }
 
+async function commandUi(
+  positionals: readonly string[],
+  portRaw: string | undefined,
+  blocked: boolean,
+  deps: CliDeps,
+  io: CliIO,
+): Promise<number> {
+  if (positionals.length !== 1 || blocked) {
+    io.error("Usage: whoport ui [--port N]");
+    return 1;
+  }
+  let port = 4747;
+  if (portRaw !== undefined) {
+    try {
+      port = parsePort(portRaw);
+    } catch (error) {
+      io.error(error instanceof PortError ? error.message : "Invalid port.");
+      return 1;
+    }
+  }
+  if (!uiAssetsReady(deps.staticRoot)) {
+    io.error(UI_ASSETS_MISSING);
+    return 1;
+  }
+  return runUiServer({
+    port,
+    staticRoot: deps.staticRoot,
+    source: deps,
+    runner: deps.runner,
+    log: (message) => io.log(message),
+    error: (message) => io.error(message),
+  });
+}
+
 interface WatchFlags {
   kill: boolean;
   yes: boolean;
@@ -357,6 +396,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
   let untilFree = false;
   let intervalRaw: string | undefined;
   let timeoutRaw: string | undefined;
+  let portRaw: string | undefined;
   let positionals: string[] = [];
 
   try {
@@ -371,6 +411,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
         interval: { type: "string" },
         "until-free": { type: "boolean" },
         timeout: { type: "string" },
+        port: { type: "string" },
       },
       allowPositionals: true,
       strict: true,
@@ -383,6 +424,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
     untilFree = parsed.values["until-free"] === true;
     intervalRaw = parsed.values.interval;
     timeoutRaw = parsed.values.timeout;
+    portRaw = parsed.values.port;
     positionals = parsed.positionals;
   } catch {
     io.error(`Unknown argument.\n${USAGE}`);
@@ -392,6 +434,16 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
   if (help) {
     io.log(helpText());
     return 0;
+  }
+
+  if (positionals[0] === "ui") {
+    const blocked = kill || yes || all || json || untilFree || intervalRaw !== undefined || timeoutRaw !== undefined;
+    return commandUi(positionals, portRaw, blocked, deps, io);
+  }
+
+  if (portRaw !== undefined) {
+    io.error(`--port is only for ui.\n${USAGE}`);
+    return 1;
   }
 
   if (positionals[0] === "watch") {
