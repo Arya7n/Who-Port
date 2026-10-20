@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-/** Inline 24px stroke icons. Decorative only: every control that uses one also has a text label. */
 function Icon({ children, className = "h-4 w-4" }: { children: ReactNode; className?: string }) {
   return (
     <svg

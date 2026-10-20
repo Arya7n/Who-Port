@@ -8,7 +8,7 @@ function fixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 }
 
-// Hand-written. `ss` is not installed in this WSL, so the lines follow iproute2's `ss -ltnpH` layout.
+// Hand-written in iproute2's `ss -ltnpH` layout.
 test("parses IPv4, IPv6, a second owner, a hidden pid, and a legacy tcp line", () => {
   const listeners = parseSs(fixture("linux-ss.txt"));
   assert.deepEqual(

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { parseNetstat, parseTasklist, withCommands } from "../src/platform/win32.js";
+import { parseNetstat, parseTasklist } from "../src/platform/win32.js";
 
 function fixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -116,14 +116,4 @@ test("skips a tasklist header, blank lines, and rows without a numeric PID", () 
 test("returns an empty map for empty tasklist output", () => {
   assert.equal(parseTasklist("").size, 0);
   assert.equal(parseTasklist("\r\n\r\n").size, 0);
-});
-
-test("attaches image names and leaves unknown PIDs blank", () => {
-  const listeners = parseNetstat(fixture("win32-netstat.txt"));
-  const named = withCommands(listeners, parseTasklist(fixture("win32-tasklist.csv")));
-  const system = named.find((listener) => listener.port === 445);
-  const redis = named.find((listener) => listener.port === 6379 && listener.address === "0.0.0.0");
-
-  assert.equal(system?.command, "System");
-  assert.equal(redis?.command, "");
 });

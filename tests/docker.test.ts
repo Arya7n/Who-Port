@@ -30,7 +30,7 @@ test("maps captured IPv4 and IPv6 publishes onto one container per host port", (
 });
 
 test("expands a published port range", () => {
-  // Hand-written. This machine had no range publish; the Ports syntax is Docker's.
+  // Hand-written in Docker's Ports syntax.
   const line = JSON.stringify({
     Names: "rangebox",
     Image: "example:dev",

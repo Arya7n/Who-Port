@@ -26,7 +26,6 @@ export function Toolbar({
     onChange({ ...filter, [key]: !filter[key] });
   };
 
-  // "/" jumps to the filter, the way most developer tools do.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;

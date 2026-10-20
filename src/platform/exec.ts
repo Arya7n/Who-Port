@@ -21,11 +21,7 @@ export interface RunToolOptions {
   timeoutMs?: number;
 }
 
-/**
- * Windows console tools sometimes write UTF-16 LE when stdout is a pipe.
- * This machine's netstat/tasklist are ASCII, but a NUL-padded buffer would
- * otherwise show up as garbage and break the parser.
- */
+/** Windows console tools may write UTF-16 LE when stdout is a pipe. */
 export function decodeToolOutput(buf: Buffer): string {
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
     return buf.subarray(2).toString("utf16le");

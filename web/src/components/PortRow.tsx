@@ -12,7 +12,6 @@ import {
 import type { Listener } from "../types.js";
 import { CheckIcon, ChevronIcon, CopyIcon, LockIcon, SpinnerIcon, StopIcon } from "./Icons.js";
 
-/** The colored edge on the port cell. The text badge carries the same kind, so color is never alone. */
 const EDGE: Record<RowKind, string> = {
   dev: "shadow-[inset_3px_0_0_var(--dev)]",
   docker: "shadow-[inset_3px_0_0_var(--docker)]",
@@ -153,7 +152,7 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 const BUTTON =
   "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium whitespace-nowrap transition-colors";
 
-/** The wrapper takes focus so the reason in the tooltip is reachable from the keyboard. */
+/** A disabled button cannot take focus, so the wrapper does, which keeps the tooltip reachable by keyboard. */
 function DisabledStop({ reason }: { reason: string }) {
   return (
     <span tabIndex={0} title={reason} className="inline-flex rounded-lg" onClick={(event) => event.stopPropagation()}>

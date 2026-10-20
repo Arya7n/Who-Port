@@ -7,10 +7,7 @@ function unsafe(value: string): boolean {
   return value.split("/").some((part) => part === "..");
 }
 
-/**
- * Only `/` and `/assets/<file>` are pages. `..`, encodings of `..`, backslashes,
- * and null bytes are rejected before any filesystem call.
- */
+/** `..`, its encodings, backslashes, and null bytes are rejected before any filesystem call. */
 export function classifyStaticUrl(rawUrl: string): StaticDecision {
   const hash = rawUrl.indexOf("#");
   const withoutHash = hash === -1 ? rawUrl : rawUrl.slice(0, hash);
@@ -38,7 +35,6 @@ export function classifyStaticUrl(rawUrl: string): StaticDecision {
   return { kind: "asset", name };
 }
 
-/** Lexical path stays inside `root`. A drive-absolute segment cannot escape. */
 export function fileInsideRoot(root: string, relativeName: string): string | null {
   if (unsafe(relativeName) || relativeName.includes(":") || isAbsolute(relativeName)) return null;
   const base = resolve(root);
@@ -48,7 +44,7 @@ export function fileInsideRoot(root: string, relativeName: string): string | nul
   return target;
 }
 
-/** `realpath` result must still sit inside the real root, so a symlink cannot leave it. */
+/** Compares realpaths, so a symlink cannot leave the root. */
 export function sameOrInside(rootReal: string, fileReal: string): boolean {
   const rel = relative(resolve(rootReal), resolve(fileReal));
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);

@@ -1,4 +1,4 @@
-/** The JSON body of GET /api/ports. Field names match `whoport --all --json`. */
+/** Same shape as `whoport --all --json`. */
 
 export interface ProjectInfo {
   name: string;

@@ -21,7 +21,7 @@ export const DEFAULT_UI_PORT = 4747;
 export const UI_HOST = "127.0.0.1";
 export const MAX_KILL_BODY_BYTES = 1024;
 export const UI_ASSETS_MISSING = "UI assets not built. Run npm run build.";
-/** The dashboard polls 2 s after each response, so 5 s spans one poll and the lookup itself. */
+/** Long enough to span one 2 s dashboard poll plus a slow lookup. */
 export const PROCESS_CACHE_MS = 5_000;
 
 /** Compiled server sits in dist/ui. The tsx entry lives in src/ui and looks one level up. */
@@ -39,7 +39,7 @@ export function isAllowedHost(header: string | undefined, port: number): boolean
   if (header === undefined) return false;
   const host = header.trim().toLowerCase();
   if (host.length === 0 || /\s/.test(host)) return false;
-  // Only the loopback names we bound. A foreign Host is a rebinding attempt.
+  // A foreign Host is a DNS rebinding attempt.
   return host === `${UI_HOST}:${port}` || host === `localhost:${port}`;
 }
 
@@ -58,7 +58,6 @@ export type KillRequest =
   | { ok: true; pid: number }
   | { ok: false; status: 400 | 413 | 415; error: string };
 
-/** Content-Type, the 1KB cap, then a positive integer pid. No other field is trusted. */
 export function parseKillRequest(contentType: string | undefined, body: Buffer): KillRequest {
   if (mediaType(contentType) !== "application/json") {
     return { ok: false, status: 415, error: "Content-Type must be application/json." };
@@ -97,10 +96,7 @@ function refuse(status: 403 | 409, message: string, suggestion?: string): KillPl
   return { action: "refuse", status, body };
 }
 
-/**
- * Decide from a fresh snapshot. Docker's forwarder is not a process to taskkill,
- * and a protected pid has no confirm step in the browser.
- */
+/** Docker's forwarder is never taskkilled, and the browser has no confirm step for a protected pid. */
 export function planKill(views: readonly PortView[], pid: number): KillPlan {
   const owned = views.filter((view) => view.pid === pid);
   if (owned.length === 0) {
@@ -147,9 +143,8 @@ export type StartedUi =
 
 interface ResolvedUi {
   port: number;
-  /** Polls read through the per-pid cache. */
   source: SnapshotSource;
-  /** The check right before a stop never uses cached details, so a reused pid is seen. */
+  /** Uncached, so the check right before a stop sees a reused pid. */
   freshSource: SnapshotSource;
   runner: ProcessRunner;
   html: (() => Promise<string | null>) | null;
@@ -295,7 +290,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, options: Resolv
     sendJson(res, 403, { error: "Forbidden." });
     return;
   }
-  // Before the body, the pid, or a process lookup. A browser on another origin must not reach kill.
+  // Checked before the body or any process lookup.
   if (req.method === "POST" && !isAllowedOrigin(req.headers.origin, port)) {
     sendJson(res, 403, { error: "Forbidden." });
     req.resume();
@@ -367,7 +362,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, options: Resolv
   sendJson(res, 404, { error: "Not found." });
 }
 
-/** Bind to loopback. Does not install signal handlers; the caller decides how to stop. */
+/** Does not install signal handlers; the caller decides how to stop. */
 export async function startUiServer(options: UiServerOptions): Promise<StartedUi> {
   const resolved = resolveOptions(options);
   let boundPort = options.port;

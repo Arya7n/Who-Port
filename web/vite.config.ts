@@ -3,8 +3,7 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
-// The API allows a missing Origin and requires Host to be its own port.
-// changeOrigin rewrites Host; the proxy also drops Origin.
+// The API rejects a foreign Host or Origin, so the proxy rewrites Host and drops Origin.
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [react(), tailwindcss()],

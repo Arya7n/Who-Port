@@ -13,10 +13,8 @@ export interface ViewFilter {
   query: string;
 }
 
-/** Dev and Docker are on. Other and System are off until the user asks for them. */
 export const DEFAULT_FILTER: ViewFilter = { dev: true, docker: true, other: false, system: false, query: "" };
 
-/** A dev row stops in one tap. Anything else that can be stopped asks first. */
 export function needsConfirm(row: Pick<Listener, "kind">): boolean {
   return row.kind !== "dev";
 }
@@ -25,7 +23,6 @@ export function rowKey(row: Pick<Listener, "port" | "pid">): string {
   return `${row.port}:${row.pid}`;
 }
 
-/** The server decides the kind, so the CLI and the dashboard agree. */
 export function rowKind(row: Pick<Listener, "kind">): RowKind {
   return row.kind;
 }
@@ -35,7 +32,6 @@ export function processName(row: Pick<Listener, "docker" | "command">): string {
   return row.command.length > 0 ? row.command : "(unknown)";
 }
 
-/** Compose project/service for a container, otherwise the package or git name. */
 export function projectLabel(row: Pick<Listener, "docker" | "project">): string | null {
   if (row.docker) {
     if (row.docker.project && row.docker.service) return `${row.docker.project}/${row.docker.service}`;
@@ -77,13 +73,12 @@ function matchesQuery(row: Listener, query: string): boolean {
   return haystack.includes(needle);
 }
 
-/** An unidentified row may be a dev server or another app, so it shows with either chip. */
+/** An unidentified row could be either kind, so either chip shows it. */
 function kindSelected(kind: RowKind, filter: ViewFilter): boolean {
   if (kind === "unidentified") return filter.dev || filter.other;
   return filter[kind];
 }
 
-/** Visible rows, sorted by port then pid so a poll does not reshuffle the table. */
 export function visibleRows(rows: readonly Listener[], filter: ViewFilter): Listener[] {
   return rows
     .filter((row) => kindSelected(rowKind(row), filter) && matchesQuery(row, filter.query))

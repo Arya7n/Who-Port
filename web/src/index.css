@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Semantic colors as Tailwind tokens: bg-surface, text-muted, border-line, text-dev, ... */
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -51,12 +50,10 @@
   }
 }
 
-/* Reserve the scrollbar's space, so the layout does not jump when the list grows past the window. */
 html {
   scrollbar-gutter: stable;
 }
 
-/* Thin, theme-colored scrollbars on the page and on the command-line and table overflow areas. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
@@ -104,7 +101,6 @@ body {
   background: color-mix(in srgb, var(--focus) 30%, transparent);
 }
 
-/* A tinted badge in the row's kind color. The text tag keeps kind readable without color. */
 .badge {
   display: inline-flex;
   align-items: center;

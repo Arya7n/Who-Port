@@ -48,9 +48,7 @@ export interface CliDeps {
   projectFs: ProjectFs;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   staticRoot: string;
-  /** How `whoport ui` finds and starts a browser. Tests inject a spawn that never opens a window. */
   launch: LaunchDeps;
-  /** Tests stop `whoport ui` with this instead of a real Ctrl+C. */
   uiSignal?: AbortSignal;
 }
 
@@ -336,7 +334,6 @@ async function commandUi(
   });
 }
 
-/** The server keeps running whatever happens here; the startup line already printed the URL. */
 async function launchWindow(port: number, launch: LaunchDeps, io: CliIO): Promise<void> {
   const url = `http://${UI_HOST}:${port}`;
   const result = await openDashboard(port, launch).catch(() => ({ status: "failed" as const }));

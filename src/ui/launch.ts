@@ -4,7 +4,6 @@ import { posix, win32 } from "node:path";
 
 export type Exists = (path: string) => boolean;
 
-/** Starts `file` with `args` and no shell. Resolves true once the process exists. */
 export type Spawner = (file: string, args: readonly string[]) => Promise<boolean>;
 
 export interface LaunchDeps {
@@ -26,11 +25,6 @@ const WINDOWS_BROWSERS = [
 
 const PATH_BROWSERS = ["google-chrome", "chromium", "microsoft-edge"];
 
-/**
- * Every place a supported browser may live, in the order to try them.
- * Windows: Edge, then Chrome, each under Program Files, Program Files (x86), then LocalAppData.
- * Elsewhere: google-chrome, chromium, then microsoft-edge on PATH.
- */
 export function browserCandidates(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string[] {
   if (platform === "win32") {
     const roots = [
@@ -46,17 +40,15 @@ export function browserCandidates(platform: NodeJS.Platform, env: NodeJS.Process
   return PATH_BROWSERS.flatMap((name) => dirs.map((dir) => posix.join(dir, name)));
 }
 
-/** The first installed browser, or null. Pure: the filesystem check is injected. */
 export function chooseLauncher(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, exists: Exists): string | null {
   return browserCandidates(platform, env).find((path) => exists(path)) ?? null;
 }
 
-/** A fixed argv. The port is a validated integer, so nothing here can become a second argument. */
+/** `port` is already a validated integer, so it cannot add an argument. */
 export function appWindowArgs(port: number): string[] {
   return [`--app=http://127.0.0.1:${port}`, "--window-size=1000,640"];
 }
 
-/** Never throws. A missing browser or a failed launch is a result, not an error. */
 export async function openDashboard(port: number, deps: LaunchDeps): Promise<LaunchResult> {
   let browser: string | null;
   try {
@@ -83,11 +75,7 @@ export function fileExists(path: string): boolean {
   }
 }
 
-/**
- * spawn with no shell, detached and with stdio ignored, then unref'd:
- * closing the window cannot stop the server, the server never waits on the browser,
- * and a chatty browser cannot fill a pipe. Ctrl+C in the terminal reaches only whoport.
- */
+/** Detached with stdio ignored: closing the window cannot stop the server, and browser logs cannot fill a pipe. */
 export const spawnDetached: Spawner = (file, args) =>
   new Promise((resolve) => {
     try {

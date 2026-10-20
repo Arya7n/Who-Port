@@ -5,7 +5,7 @@ export type RowKind = "dev" | "docker" | "other" | "system" | "unidentified";
 
 export const UNIDENTIFIED_MESSAGE = "Couldn't identify this process. Try again.";
 
-/** Runtimes and local services a developer usually starts by hand. Matched without `.exe`. */
+/** Matched without `.exe`. */
 const DEV_RUNTIMES = new Set([
   "node",
   "deno",
@@ -32,9 +32,8 @@ export function isDevRuntime(command: string): boolean {
 }
 
 /**
- * Docker wins over the forwarder's protected flag. A row with no process name is
- * unidentified: protection is decided by name, so it must never look stoppable.
- * Dev needs evidence (a project or a known runtime); any other app is OTHER.
+ * Docker wins over the forwarder's protected flag. Protection is decided by name,
+ * so a row without one is unidentified and must never look stoppable.
  */
 export function rowKind(view: {
   docker: ContainerInfo | null;

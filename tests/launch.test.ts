@@ -150,7 +150,6 @@ async function runUi(args: string[], spawn: Spawner, exists: (path: string) => b
       {
         log: (message) => {
           logs.push(message);
-          // Stop as soon as the server says it is up, the way Ctrl+C would.
           if (message.includes("running at")) controller.abort();
         },
         error: (message) => errors.push(message),

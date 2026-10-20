@@ -7,7 +7,7 @@ export interface ReportStyle {
 
 const RESET = "\x1b[0m";
 
-/** NO_COLOR present and non-empty disables color. A pipe is not a terminal, so it stays plain. */
+/** A non-empty NO_COLOR disables color. */
 export function useColor(env: NodeJS.ProcessEnv, isTTY: boolean): boolean {
   if (!isTTY) return false;
   const noColor = env.NO_COLOR;
@@ -25,12 +25,10 @@ function paint(enabled: boolean, code: string, text: string): string {
   return `\x1b[${code}m${text}${RESET}`;
 }
 
-/** Dim secondary text. Callers pass `useColor` so a pipe or NO_COLOR stays plain. */
 export function dim(enabled: boolean, text: string): string {
   return paint(enabled, "2", text);
 }
 
-/** OTHER keeps the terminal's own color, so only dev servers read as green. */
 function tone(view: PortView): string | null {
   if (view.docker) return "33";
   if (view.pid === 0) return null;

@@ -12,7 +12,6 @@ export interface PortsState {
   retry: () => void;
 }
 
-/** Poll while the tab is visible. A failure keeps the last good list. */
 export function usePorts(): PortsState {
   const [listeners, setListeners] = useState<Listener[] | null>(null);
   const [failed, setFailed] = useState(false);

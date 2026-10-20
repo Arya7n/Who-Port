@@ -108,17 +108,7 @@ export function parseTasklist(output: string): Map<number, string> {
   return commands;
 }
 
-export function withCommands(listeners: readonly Listener[], commands: ReadonlyMap<number, string>): Listener[] {
-  return listeners.map((listener) => ({
-    ...listener,
-    command: commands.get(listener.pid) ?? "",
-  }));
-}
-
-/**
- * netstat only. Image names come with the process details (one CIM query for the
- * listening PIDs), which is much faster than `tasklist` listing every process.
- */
+/** Image names come later, from the CIM process query. */
 export async function listWin32Listeners(): Promise<ListenerQuery> {
   const netstat = await runTool("netstat", ["-ano"]);
   if (!netstat.ok) {

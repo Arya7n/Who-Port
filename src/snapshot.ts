@@ -3,7 +3,6 @@ import { buildViews, type PortView } from "./inspect.js";
 import type { ListenerQuery } from "./platform/types.js";
 import type { ProcessDetails, ProjectFs } from "./resolve.js";
 
-/** The same lookups `whoport` and `whoport ui` use to describe listeners. */
 export interface SnapshotSource {
   listListeners: () => Promise<ListenerQuery>;
   readProcesses: (pids: readonly number[]) => Promise<Map<number, ProcessDetails>>;
@@ -17,10 +16,7 @@ export interface PortSnapshot {
   warnings: string[];
 }
 
-/**
- * Rows for every listener, or for one port.
- * `port === null` is `whoport --all`.
- */
+/** `port === null` means every listener. */
 export async function loadPortViews(source: SnapshotSource, port: number | null): Promise<PortSnapshot> {
   const query = await source.listListeners();
   const listeners = port === null ? query.listeners : query.listeners.filter((listener) => listener.port === port);
