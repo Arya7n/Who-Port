@@ -43,11 +43,12 @@ export function App() {
     void killPid(target.pid).then((result) => {
       if (result.ok) {
         setFading((current) => new Set(current).add(rowKey(target)));
+        window.setTimeout(retry, 200);
         return;
       }
       setToast(result.message);
     });
-  }, []);
+  }, [retry]);
 
   const copyStop = async (row: Listener): Promise<void> => {
     const command = dockerStopCommand(row);
