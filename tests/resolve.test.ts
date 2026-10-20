@@ -4,11 +4,14 @@ import { posix, win32 } from "node:path";
 import test from "node:test";
 
 import {
+  etimeToSeconds,
   extractPaths,
   findProjectRoot,
   formatPidList,
   formatUptime,
   parseCimOutput,
+  parsePsEtime,
+  parsePsEtimes,
   resolveProject,
   type ProjectFs,
 } from "../src/resolve.js";
@@ -201,4 +204,15 @@ test("parses a CIM array and ignores malformed output", () => {
 test("joins only integer PIDs", () => {
   assert.equal(formatPidList([4, 4, 18]), "4,18");
   assert.throws(() => formatPidList([1.5]), /invalid PID/);
+});
+
+test("parses linux etimes and macOS etime", () => {
+  assert.deepEqual(parsePsEtimes("   120 node /home/a/app/dist/main.js"), {
+    elapsedSeconds: 120,
+    args: "node /home/a/app/dist/main.js",
+  });
+  assert.equal(etimeToSeconds("05:09"), 309);
+  assert.equal(etimeToSeconds("01:05:09"), 3909);
+  assert.equal(etimeToSeconds("2-01:05:09"), 2 * 86400 + 3909);
+  assert.equal(parsePsEtime("01:00:00 node server.js")?.elapsedSeconds, 3600);
 });

@@ -129,6 +129,47 @@ export const windowsRunner: ProcessRunner = {
   running: windowsRunning,
 };
 
+export type KillFn = (pid: number, signal: NodeJS.Signals | 0) => void;
+
+function defaultKill(pid: number, signal: NodeJS.Signals | 0): void {
+  process.kill(pid, signal);
+}
+
+function signalResult(error: unknown): ControlResult {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ESRCH") return { ok: false, reason: "gone", message: "The process was already gone." };
+  if (code === "EPERM") return { ok: false, reason: "denied", message: "Access denied. Try sudo." };
+  if (code === "EINVAL") return { ok: false, reason: "invalid", message: "That PID is not valid." };
+  const message = error instanceof Error ? error.message : "kill failed.";
+  return { ok: false, reason: "failed", message };
+}
+
+/** SIGTERM, then SIGKILL. `kill(pid, 0)` is only a liveness check. */
+export function createPosixRunner(kill: KillFn = defaultKill): ProcessRunner {
+  function signal(pid: number, sig: NodeJS.Signals | 0): ControlResult {
+    const invalid = rejectPid(pid);
+    if (invalid) return invalid;
+    try {
+      kill(pid, sig);
+      return { ok: true };
+    } catch (error) {
+      return signalResult(error);
+    }
+  }
+
+  return {
+    terminate: (pid) => Promise.resolve(signal(pid, "SIGTERM")),
+    force: (pid) => Promise.resolve(signal(pid, "SIGKILL")),
+    running: (pid) => {
+      const result = signal(pid, 0);
+      if (result.ok) return Promise.resolve(true);
+      // EPERM means the process exists and belongs to someone else.
+      if (!result.ok && result.reason === "denied") return Promise.resolve(true);
+      return Promise.resolve(false);
+    },
+  };
+}
+
 export async function dockerStop(name: string): Promise<ControlResult> {
   if (!isContainerName(name)) {
     return { ok: false, reason: "invalid", message: `Refusing to stop unexpected container name "${name}".` };

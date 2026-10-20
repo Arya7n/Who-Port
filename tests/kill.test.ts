@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   classifyTaskkill,
+  createPosixRunner,
   isContainerName,
   isProtectedProcess,
   stopProcess,
@@ -106,4 +107,45 @@ test("accepts docker container names and rejects anything else", () => {
   assert.equal(isContainerName(""), false);
   assert.equal(isContainerName("name with space"), false);
   assert.equal(isContainerName("-bad"), false);
+});
+
+test("posix runner sends SIGTERM and escalates to SIGKILL", async () => {
+  const signals: Array<NodeJS.Signals | 0> = [];
+  let alive = true;
+  const posix = createPosixRunner((pid, signal) => {
+    if (signal === 0) {
+      if (!alive) {
+        const error = new Error("gone") as NodeJS.ErrnoException;
+        error.code = "ESRCH";
+        throw error;
+      }
+      return;
+    }
+    signals.push(signal);
+    if (signal === "SIGKILL") alive = false;
+    void pid;
+  });
+  const result = await stopProcess(10, posix, { force: true, waitMs: 0, sleep: async () => {} });
+  assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(result.forced, true);
+});
+
+test("posix runner reports ESRCH and EPERM", async () => {
+  const missing = createPosixRunner(() => {
+    const error = new Error("gone") as NodeJS.ErrnoException;
+    error.code = "ESRCH";
+    throw error;
+  });
+  const gone = await missing.terminate(10);
+  assert.equal(gone.ok, false);
+  if (!gone.ok) assert.equal(gone.reason, "gone");
+
+  const deniedRunner = createPosixRunner(() => {
+    const error = new Error("nope") as NodeJS.ErrnoException;
+    error.code = "EPERM";
+    throw error;
+  });
+  const denied = await deniedRunner.terminate(10);
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.equal(denied.reason, "denied");
 });

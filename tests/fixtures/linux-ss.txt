@@ -1,0 +1,6 @@
+LISTEN 0      511        127.0.0.1:3000       0.0.0.0:*    users:(("node",pid=1234,fd=21))
+LISTEN 0      511            [::1]:3000          [::]:*    users:(("node",pid=1234,fd=22))
+LISTEN 0      128          0.0.0.0:3000       0.0.0.0:*    users:(("node",pid=2222,fd=18))
+LISTEN 0      128          0.0.0.0:5432       0.0.0.0:*
+tcp    LISTEN  0      128    127.0.0.1:80                 *:*                   users:(("nginx",pid=99,fd=5))
+this is malformed

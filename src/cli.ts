@@ -1,18 +1,45 @@
 #!/usr/bin/env node
-import { parseArgs } from "node:util";
-import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
+import { pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
+import { listContainers } from "./docker.js";
 import { ToolError } from "./errors.js";
+import { buildViews, sharedTarget, type KillTarget, type PortView } from "./inspect.js";
+import {
+  createPosixRunner,
+  dockerStop,
+  stopProcess,
+  windowsRunner,
+  type ControlResult,
+  type ProcessRunner,
+} from "./kill.js";
+import { listListeners } from "./platform/index.js";
+import type { ListenerQuery } from "./platform/types.js";
 import { parsePort, PortError } from "./port.js";
-import { listenersOnPort } from "./platform/index.js";
-import { formatPortReport } from "./report.js";
+import { formatKillJson, formatListenersJson, formatPortReport, formatTable, useColor } from "./report.js";
+import { nodeProjectFs, readProcesses, type ProcessDetails, type ProjectFs } from "./resolve.js";
 
-const USAGE = "Usage: whoport <port>";
+const USAGE = "Usage: whoport [port] [--all] [--json] [--kill] [--yes]";
 
 export interface CliIO {
   log: (message: string) => void;
   error: (message: string) => void;
+}
+
+export interface CliDeps {
+  listListeners: () => Promise<ListenerQuery>;
+  readProcesses: (pids: readonly number[]) => Promise<Map<number, ProcessDetails>>;
+  containers: () => Promise<Map<number, import("./docker.js").ContainerInfo>>;
+  runner: ProcessRunner;
+  dockerStop: (name: string) => Promise<ControlResult>;
+  now: () => Date;
+  isTTY: boolean;
+  ask: (prompt: string) => Promise<string>;
+  color: boolean;
+  projectFs: ProjectFs;
 }
 
 const defaultIO: CliIO = {
@@ -24,30 +51,240 @@ const defaultIO: CliIO = {
   },
 };
 
+export function parseYes(answer: string): boolean {
+  return /^(y|yes)$/i.test(answer.trim());
+}
+
+export function parseRowChoice(answer: string, count: number): number | "quit" | null {
+  const text = answer.trim();
+  if (/^(q|quit)$/i.test(text)) return "quit";
+  if (!/^\d+$/.test(text)) return null;
+  const row = Number(text);
+  if (row < 1 || row > count) return null;
+  return row;
+}
+
+export async function ask(prompt: string): Promise<string> {
+  const rl = readline.createInterface({ input, output });
+  try {
+    return await rl.question(prompt);
+  } finally {
+    rl.close();
+  }
+}
+
 function helpText(): string {
   return [
     USAGE,
     "",
-    "Show which process is listening on a TCP port.",
+    "Show which process is listening, which project it belongs to, and whether it is safe to stop.",
+    "",
+    "  whoport                 list ports and pick a row",
+    "  whoport <port>          inspect one port",
+    "  whoport <port> --kill   stop it after confirmation",
+    "  whoport --all           table of listening TCP ports",
+    "  whoport --json          machine-readable output",
+    "",
     "The port must be an integer from 1 to 65535.",
   ].join("\n");
 }
 
-export async function main(argv: readonly string[], io: CliIO = defaultIO): Promise<number> {
-  let positionals: string[];
+function makeDeps(overrides: Partial<CliDeps>): CliDeps {
+  const isTTY = overrides.isTTY !== undefined ? overrides.isTTY : Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const deps: CliDeps = {
+    listListeners,
+    readProcesses,
+    containers: listContainers,
+    runner: process.platform === "win32" ? windowsRunner : createPosixRunner(),
+    dockerStop,
+    now: () => new Date(),
+    isTTY,
+    ask,
+    color: useColor(process.env, isTTY),
+    projectFs: nodeProjectFs,
+  };
+  if (overrides.listListeners) deps.listListeners = overrides.listListeners;
+  if (overrides.readProcesses) deps.readProcesses = overrides.readProcesses;
+  if (overrides.containers) deps.containers = overrides.containers;
+  if (overrides.runner) deps.runner = overrides.runner;
+  if (overrides.dockerStop) deps.dockerStop = overrides.dockerStop;
+  if (overrides.now) deps.now = overrides.now;
+  if (overrides.ask) deps.ask = overrides.ask;
+  if (overrides.projectFs) deps.projectFs = overrides.projectFs;
+  if (overrides.color !== undefined) deps.color = overrides.color;
+  return deps;
+}
+
+async function loadViews(deps: CliDeps, port: number | null, io: CliIO): Promise<PortView[] | null> {
+  try {
+    const query = await deps.listListeners();
+    for (const warning of query.warnings) io.error(`warning: ${warning}`);
+    const listeners = port === null ? query.listeners : query.listeners.filter((listener) => listener.port === port);
+    const pids = [...new Set(listeners.map((listener) => listener.pid).filter((pid) => pid > 0))];
+    const [details, containers] = await Promise.all([deps.readProcesses(pids), deps.containers()]);
+    return buildViews(listeners, details, containers, deps.projectFs, deps.now());
+  } catch (error) {
+    if (error instanceof ToolError) {
+      io.error(error.message);
+      return null;
+    }
+    throw error;
+  }
+}
+
+type Answer = "yes" | "no" | "mismatch" | "blocked";
+
+async function confirmStop(target: Extract<KillTarget, { kind: "docker" | "process" }>, deps: CliDeps, yes: boolean): Promise<Answer> {
+  if (target.kind === "docker") {
+    if (yes) return "yes";
+    if (!deps.isTTY) return "blocked";
+    const answer = await deps.ask(`Stop container ${target.name} with docker stop? [y/N] `);
+    return parseYes(answer) ? "yes" : "no";
+  }
+  if (target.protected) {
+    if (!deps.isTTY) return "blocked";
+    const typed = (await deps.ask(`PID ${target.pid} (${target.command}) is protected. Type ${target.pid} to confirm: `)).trim();
+    return typed === String(target.pid) ? "yes" : "mismatch";
+  }
+  if (yes) return "yes";
+  if (!deps.isTTY) return "blocked";
+  const answer = await deps.ask(`Stop PID ${target.pid} (${target.command})? [y/N] `);
+  return parseYes(answer) ? "yes" : "no";
+}
+
+async function performStop(
+  port: number,
+  target: Extract<KillTarget, { kind: "docker" | "process" }>,
+  deps: CliDeps,
+  yes: boolean,
+  io: CliIO,
+  json: boolean,
+): Promise<number> {
+  const answer = await confirmStop(target, deps, yes);
+  if (answer === "blocked") {
+    const message =
+      target.kind === "docker"
+        ? "Pass --yes to stop a container without a terminal."
+        : target.protected
+          ? `PID ${target.pid} is protected. whoport will not stop it without a terminal.`
+          : "Pass --yes to stop a process without a terminal.";
+    return finishKill(port, false, "refused", message, io, json, 1);
+  }
+  if (answer === "no") return finishKill(port, false, "refused", "Left it alone.", io, json, 0);
+  if (answer === "mismatch") {
+    return finishKill(port, false, "refused", "Confirmation did not match. Left it alone.", io, json, 1);
+  }
+
+  if (target.kind === "docker") {
+    const result = await deps.dockerStop(target.name);
+    if (result.ok) return finishKill(port, true, "docker-stop", `Stopped container ${target.name}.`, io, json, 0);
+    return finishKill(port, false, "docker-stop", result.message, io, json, 1);
+  }
+
+  const graceful = await stopProcess(target.pid, deps.runner, { force: yes });
+  if (graceful.status === "still-running" && !yes) {
+    if (!deps.isTTY) return finishKill(port, false, "stop", graceful.message, io, json, 1);
+    const forceAnswer = await deps.ask(`PID ${target.pid} is still running. Force stop? [y/N] `);
+    if (!parseYes(forceAnswer)) return finishKill(port, false, "stop", graceful.message, io, json, 0);
+    const forced = await deps.runner.force(target.pid);
+    if (forced.ok || (!forced.ok && forced.reason === "gone")) {
+      return finishKill(port, true, "force", `PID ${target.pid} did not exit. Forced it to stop.`, io, json, 0);
+    }
+    return finishKill(port, false, "force", forced.message, io, json, 1);
+  }
+
+  const ok = graceful.status === "stopped";
+  const action = graceful.forced ? "force" : "stop";
+  return finishKill(port, ok, action, graceful.message, io, json, ok ? 0 : 1);
+}
+
+function finishKill(
+  port: number,
+  ok: boolean,
+  action: string,
+  message: string,
+  io: CliIO,
+  json: boolean,
+  code: number,
+): number {
+  if (json) io.log(formatKillJson({ port, ok, action, message }));
+  else if (code === 0) io.log(message);
+  else io.error(message);
+  return code;
+}
+
+async function stopPort(port: number, views: readonly PortView[], deps: CliDeps, yes: boolean, io: CliIO, json: boolean): Promise<number> {
+  if (views.length === 0) {
+    const message = `port ${port} is free`;
+    if (json) io.log(formatListenersJson(views, port));
+    else io.log(message);
+    return 0;
+  }
+  const target = sharedTarget(views);
+  if (target.kind === "mixed") {
+    return finishKill(
+      port,
+      false,
+      "refused",
+      `Port ${port} is held by more than one process. Run whoport and pick a row.`,
+      io,
+      json,
+      1,
+    );
+  }
+  if (target.kind === "none") return finishKill(port, false, "refused", `port ${port} is free`, io, json, 0);
+  return performStop(port, target, deps, yes, io, json);
+}
+
+async function interactive(views: readonly PortView[], deps: CliDeps, io: CliIO): Promise<number> {
+  io.log(formatTable(views, { color: deps.color, numbers: true }));
+  if (views.length === 0) return 0;
+  const answer = await deps.ask("Row to inspect, or q to quit: ");
+  const choice = parseRowChoice(answer, views.length);
+  if (choice === "quit") return 0;
+  if (choice === null) {
+    io.error("No row matches that.");
+    return 1;
+  }
+  const view = views[choice - 1];
+  if (!view) {
+    io.error("No row matches that.");
+    return 1;
+  }
+  io.log("");
+  io.log(formatPortReport(view.port, [view], deps.color));
+  io.log("");
+  return stopPort(view.port, [view], deps, false, io, false);
+}
+
+export async function main(argv: readonly string[], io: CliIO = defaultIO, overrides: Partial<CliDeps> = {}): Promise<number> {
+  const deps = makeDeps(overrides);
   let help = false;
+  let kill = false;
+  let yes = false;
+  let all = false;
+  let json = false;
+  let positionals: string[] = [];
 
   try {
     const parsed = parseArgs({
       args: [...argv],
       options: {
         help: { type: "boolean", short: "h" },
+        kill: { type: "boolean" },
+        yes: { type: "boolean" },
+        all: { type: "boolean" },
+        json: { type: "boolean" },
       },
       allowPositionals: true,
       strict: true,
     });
-    positionals = parsed.positionals;
     help = parsed.values.help === true;
+    kill = parsed.values.kill === true;
+    yes = parsed.values.yes === true;
+    all = parsed.values.all === true;
+    json = parsed.values.json === true;
+    positionals = parsed.positionals;
   } catch {
     io.error(`Unknown argument.\n${USAGE}`);
     return 1;
@@ -57,37 +294,59 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO): Prom
     io.log(helpText());
     return 0;
   }
-
-  const rawPort = positionals[0];
-  if (positionals.length !== 1 || rawPort === undefined) {
+  if (yes && !kill) {
+    io.error(`--yes only applies to --kill.\n${USAGE}`);
+    return 1;
+  }
+  if (positionals.length > 1) {
     io.error(USAGE);
     return 1;
   }
 
-  let port: number;
-  try {
-    port = parsePort(rawPort);
-  } catch (error) {
-    const message = error instanceof PortError ? error.message : "Invalid port.";
-    io.error(message);
+  const rawPort = positionals[0];
+  let port: number | null = null;
+  if (rawPort !== undefined) {
+    try {
+      port = parsePort(rawPort);
+    } catch (error) {
+      io.error(error instanceof PortError ? error.message : "Invalid port.");
+      return 1;
+    }
+  }
+
+  if (kill && port === null) {
+    io.error(`--kill needs a port.\n${USAGE}`);
+    return 1;
+  }
+  if (all && port !== null) {
+    io.error(`Pass either a port or --all.\n${USAGE}`);
+    return 1;
+  }
+  if (kill && all) {
+    io.error(`--kill needs one port.\n${USAGE}`);
     return 1;
   }
 
-  try {
-    const query = await listenersOnPort(port);
-    for (const warning of query.warnings) {
-      // stderr, so a future machine-readable stdout stays clean.
-      io.error(`warning: ${warning}`);
+  if (port === null && !kill) {
+    const views = await loadViews(deps, null, io);
+    if (views === null) return 1;
+    if (json || all || !deps.isTTY) {
+      io.log(json ? formatListenersJson(views) : formatTable(views, { color: deps.color, numbers: false }));
+      return 0;
     }
-    io.log(formatPortReport(port, query.listeners));
-    return 0;
-  } catch (error) {
-    if (error instanceof ToolError) {
-      io.error(error.message);
-      return 1;
-    }
-    throw error;
+    return interactive(views, deps, io);
   }
+
+  if (port === null) {
+    io.error(USAGE);
+    return 1;
+  }
+
+  const views = await loadViews(deps, port, io);
+  if (views === null) return 1;
+  if (kill) return stopPort(port, views, deps, yes, io, json);
+  io.log(json ? formatListenersJson(views, port) : formatPortReport(port, views, deps.color));
+  return 0;
 }
 
 function isDirectRun(): boolean {

@@ -1,39 +1,112 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatPortReport } from "../src/report.js";
-import type { Listener } from "../src/platform/types.js";
+import type { PortView } from "../src/inspect.js";
+import { formatPortReport, formatTable, truncateCommand, useColor } from "../src/report.js";
 
-function listener(overrides: Partial<Listener>): Listener {
+function view(overrides: Partial<PortView> = {}): PortView {
   return {
     port: 3000,
-    pid: 10,
+    pid: 18432,
+    addresses: ["127.0.0.1"],
     command: "node.exe",
-    address: "127.0.0.1",
-    protocol: "tcp",
+    commandLine: "node dist/main.js",
+    executablePath: null,
+    startedAt: "2026-10-20T10:00:00.000Z",
+    uptime: "2h ago",
+    project: { name: "chat-service", root: "C:\\code\\chat-service" },
+    docker: null,
+    protected: false,
+    verdict: "Looks like a stale node.exe from chat-service (2h ago). Safe to stop.",
     ...overrides,
   };
 }
 
 test("says when a port is free", () => {
-  assert.equal(formatPortReport(3000, []), "port 3000 is free");
+  assert.equal(formatPortReport(3000, [], false), "port 3000 is free");
 });
 
-test("prints one listener as a plain block", () => {
-  const text = formatPortReport(3000, [listener({})]);
+test("prints a dev server as a card", () => {
+  const text = formatPortReport(3000, [view()], false);
+  assert.match(text, /^port 3000/);
+  assert.match(text, /project {3}chat-service/);
+  assert.match(text, /started {3}2h ago/);
+  assert.match(text, /Safe to stop\.$/);
+});
+
+test("prints a docker publish without the proxy command", () => {
+  const text = formatPortReport(
+    6380,
+    [
+      view({
+        port: 6380,
+        pid: 9012,
+        addresses: ["0.0.0.0", "::"],
+        command: "com.docker.backend.exe",
+        commandLine: null,
+        project: null,
+        uptime: null,
+        docker: { name: "patent-dev-redis-1", image: "redis:7-alpine", project: "patent-dev", service: "redis" },
+        verdict: "Docker container patent-dev-redis-1 (redis:7-alpine), compose patent-dev/redis. Stop it with docker stop patent-dev-redis-1.",
+      }),
+    ],
+    false,
+  );
+  assert.match(text, /container patent-dev-redis-1/);
+  assert.match(text, /compose {3}patent-dev\/redis/);
+  assert.doesNotMatch(text, /com\.docker\.backend/);
+});
+
+test("renders the --all table without color", () => {
+  const text = formatTable(
+    [
+      view(),
+      view({
+        port: 6380,
+        pid: 9012,
+        command: "com.docker.backend.exe",
+        commandLine: null,
+        project: null,
+        uptime: "unknown",
+        docker: { name: "patent-dev-redis-1", image: "redis:7-alpine", project: "patent-dev", service: "redis" },
+        verdict: "docker",
+      }),
+      view({
+        port: 445,
+        pid: 4,
+        addresses: ["0.0.0.0"],
+        command: "System",
+        commandLine: null,
+        project: null,
+        uptime: "2w ago",
+        protected: true,
+        verdict: "protected",
+      }),
+    ],
+    { color: false, numbers: false },
+  );
+
   assert.equal(
     text,
-    ["port 3000", "", "pid       10", "command   node.exe", "address   127.0.0.1", "protocol  tcp"].join("\n"),
+    [
+      " PORT      PID  PROCESS                 PROJECT               UPTIME  ",
+      " 3000    18432  node.exe                chat-service          2h ago  ",
+      " 6380     9012  patent-dev-redis-1      patent-dev/redis      unknown ",
+      "  445        4  System                  unknown               2w ago  ",
+    ].join("\n"),
   );
 });
 
-test("prints unknown commands and every listener on a shared port", () => {
-  const text = formatPortReport(3000, [
-    listener({ pid: 18432, address: "127.0.0.1", command: "" }),
-    listener({ pid: 22001, address: "0.0.0.0", command: "node.exe" }),
-  ]);
+test("colors a dev process green and dims the pid", () => {
+  const text = formatTable([view()], { color: true, numbers: false });
+  assert.match(text, /\x1b\[32m/);
+  assert.match(text, /\x1b\[2m/);
+  assert.equal(useColor({ NO_COLOR: "1" }, true), false);
+  assert.equal(useColor({}, false), false);
+  assert.equal(useColor({}, true), true);
+});
 
-  assert.match(text, /^port 3000\n2 listeners/);
-  assert.match(text, /command   \(unknown\)/);
-  assert.ok(text.indexOf("0.0.0.0") < text.indexOf("127.0.0.1"));
+test("truncates a long command", () => {
+  assert.equal(truncateCommand("x".repeat(200), 16), `${"x".repeat(13)}...`);
+  assert.equal(truncateCommand("short"), "short");
 });

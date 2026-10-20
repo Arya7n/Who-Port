@@ -37,10 +37,8 @@ type PathApi = typeof win32;
  */
 const CIM_SCRIPT = [
   "$want = $env:WHOPORT_PIDS.Split(',') | ForEach-Object { [int]$_ }",
-  "Get-CimInstance Win32_Process | Where-Object { $want -contains [int]$_.ProcessId }",
-  "| Select-Object ProcessId,CommandLine,ExecutablePath,CreationDate",
-  "| ConvertTo-Json -Compress",
-].join(" ");
+  "Get-CimInstance Win32_Process | Where-Object { $want -contains [int]$_.ProcessId } | Select-Object ProcessId,CommandLine,ExecutablePath,CreationDate | ConvertTo-Json -Compress",
+].join("; ");
 
 export function formatPidList(pids: readonly number[]): string {
   const unique: number[] = [];
@@ -332,4 +330,99 @@ export function readCwd(pid: number): string | null {
   } catch {
     return null;
   }
+}
+
+/** `ps -o etimes=` prints elapsed seconds, so uptime does not depend on the locale. */
+export function parsePsEtimes(output: string): { elapsedSeconds: number; args: string } | null {
+  const match = /^\s*(\d+)\s+([\s\S]*)$/.exec(output.trim());
+  const seconds = match?.[1];
+  const args = match?.[2];
+  if (seconds === undefined || args === undefined) return null;
+  return { elapsedSeconds: Number(seconds), args: args.trimEnd() };
+}
+
+/** macOS `ps -o etime=` is `[[dd-]hh:]mm:ss`, not a raw second count. */
+export function etimeToSeconds(value: string): number | null {
+  const withDays = /^(\d+)-(\d+):(\d+):(\d+)$/.exec(value);
+  if (withDays?.[1] && withDays[2] && withDays[3] && withDays[4]) {
+    return Number(withDays[1]) * 86400 + Number(withDays[2]) * 3600 + Number(withDays[3]) * 60 + Number(withDays[4]);
+  }
+  const hours = /^(\d+):(\d+):(\d+)$/.exec(value);
+  if (hours?.[1] && hours[2] && hours[3]) {
+    return Number(hours[1]) * 3600 + Number(hours[2]) * 60 + Number(hours[3]);
+  }
+  const minutes = /^(\d+):(\d+)$/.exec(value);
+  if (minutes?.[1] && minutes[2]) return Number(minutes[1]) * 60 + Number(minutes[2]);
+  return null;
+}
+
+export function parsePsEtime(output: string): { elapsedSeconds: number; args: string } | null {
+  const match = /^\s*(\d+-\d+:\d+:\d+|\d+:\d+:\d+|\d+:\d+)\s+([\s\S]*)$/.exec(output.trim());
+  const clock = match?.[1];
+  const args = match?.[2];
+  if (clock === undefined || args === undefined) return null;
+  const elapsedSeconds = etimeToSeconds(clock);
+  if (elapsedSeconds === null) return null;
+  return { elapsedSeconds, args: args.trimEnd() };
+}
+
+/** `lsof -Fn` cwd lines look like `n/path`. */
+export function parseLsofCwd(output: string): string | null {
+  for (const line of output.split(/\r?\n/)) {
+    if (line.startsWith("n") && line.length > 1) return line.slice(1);
+  }
+  return null;
+}
+
+function fromElapsed(elapsedSeconds: number, now: number): Date {
+  return new Date(now - elapsedSeconds * 1000);
+}
+
+async function readOneUnix(
+  pid: number,
+  cwd: string | null,
+  ps: { ok: true; stdout: string } | { ok: false },
+  parse: (output: string) => { elapsedSeconds: number; args: string } | null,
+  now: number,
+): Promise<ProcessDetails> {
+  const parsed = ps.ok ? parse(ps.stdout) : null;
+  return {
+    commandLine: parsed?.args ?? null,
+    executablePath: null,
+    startTime: parsed ? fromElapsed(parsed.elapsedSeconds, now) : null,
+    cwd,
+  };
+}
+
+export async function readLinuxProcesses(pids: readonly number[]): Promise<Map<number, ProcessDetails>> {
+  const details = new Map<number, ProcessDetails>();
+  const now = Date.now();
+  for (const pid of pids) {
+    if (!Number.isInteger(pid) || pid < 0) continue;
+    const ps = await runTool("ps", ["-ww", "-o", "etimes=", "-o", "args=", "-p", String(pid)]);
+    details.set(pid, await readOneUnix(pid, readCwd(pid), ps.ok ? ps : { ok: false }, parsePsEtimes, now));
+  }
+  return details;
+}
+
+export async function readDarwinProcesses(pids: readonly number[]): Promise<Map<number, ProcessDetails>> {
+  const details = new Map<number, ProcessDetails>();
+  const now = Date.now();
+  for (const pid of pids) {
+    if (!Number.isInteger(pid) || pid < 0) continue;
+    const [cwdResult, ps] = await Promise.all([
+      runTool("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"]),
+      runTool("ps", ["-ww", "-o", "etime=", "-o", "args=", "-p", String(pid)]),
+    ]);
+    const cwd = cwdResult.ok ? parseLsofCwd(cwdResult.stdout) : null;
+    details.set(pid, await readOneUnix(pid, cwd, ps.ok ? ps : { ok: false }, parsePsEtime, now));
+  }
+  return details;
+}
+
+export async function readProcesses(pids: readonly number[]): Promise<Map<number, ProcessDetails>> {
+  if (process.platform === "win32") return readWindowsProcesses(pids);
+  if (process.platform === "darwin") return readDarwinProcesses(pids);
+  if (process.platform === "linux") return readLinuxProcesses(pids);
+  return new Map();
 }
