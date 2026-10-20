@@ -62,7 +62,7 @@ function request(
   });
 }
 
-test("serves built files and refuses paths that leave dist/ui", async () => {
+test("serves built files and refuses paths that leave the static root", async () => {
   const root = await mkdtemp(join(tmpdir(), "whoport-ui-"));
   const outside = join(tmpdir(), `whoport-secret-${Date.now()}.txt`);
   await mkdir(join(root, "assets"));
@@ -156,7 +156,7 @@ test("ui without a build tells you to run npm run build", async () => {
 });
 
 test("the dashboard root comes from the server module, not the working directory", async () => {
-  const expected = resolve(fileURLToPath(new URL("../dist/ui", import.meta.url)));
+  const expected = resolve(fileURLToPath(new URL("../dist/web", import.meta.url)));
   const before = process.cwd();
   const elsewhere = await mkdtemp(join(tmpdir(), "whoport-cwd-"));
   try {

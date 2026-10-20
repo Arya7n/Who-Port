@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -24,11 +24,9 @@ export const UI_ASSETS_MISSING = "UI assets not built. Run npm run build.";
 /** Long enough to span one 2 s dashboard poll plus a slow lookup. */
 export const PROCESS_CACHE_MS = 5_000;
 
-/** Compiled server sits in dist/ui. The tsx entry lives in src/ui and looks one level up. */
+/** src/ui and dist/ui are both two levels below the package root, so one relative path works from either. */
 export function defaultUiRoot(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  if (basename(here) === "ui" && basename(dirname(here)) === "dist") return here;
-  return resolve(here, "../../dist/ui");
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../dist/web");
 }
 
 export function uiAssetsReady(root: string): boolean {

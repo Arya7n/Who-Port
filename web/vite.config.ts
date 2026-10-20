@@ -8,8 +8,8 @@ export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [react(), tailwindcss()],
   build: {
-    outDir: fileURLToPath(new URL("../dist/ui", import.meta.url)),
-    emptyOutDir: false,
+    outDir: fileURLToPath(new URL("../dist/web", import.meta.url)),
+    emptyOutDir: true,
     assetsDir: "assets",
   },
   server: {

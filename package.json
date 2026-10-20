@@ -58,7 +58,7 @@
     "react-dom": "Mounts the dashboard in the browser. Not a server dependency.",
     "@types/react": "Types for the dashboard components.",
     "@types/react-dom": "Types for the dashboard mount.",
-    "vite": "Bundles the dashboard into dist/ui.",
+    "vite": "Bundles the dashboard into dist/web.",
     "@vitejs/plugin-react": "Compiles the dashboard JSX in the Vite build.",
     "tailwindcss": "Utility styles for the dashboard, emitted as one CSS file.",
     "@tailwindcss/vite": "Official Tailwind plugin for that Vite build."
