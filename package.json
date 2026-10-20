@@ -1,0 +1,23 @@
+{
+  "name": "whoport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Show which process is listening on a TCP port.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "whoport": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

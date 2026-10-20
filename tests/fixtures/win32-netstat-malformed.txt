@@ -1,0 +1,10 @@
+this is not netstat
+  TCP    not-an-address         0.0.0.0:0              LISTENING       12
+  TCP    127.0.0.1:99999        0.0.0.0:0              LISTENING       12
+  TCP    127.0.0.1:80           0.0.0.0:0              LISTENING       no-pid
+  TCP    127.0.0.1              0.0.0.0:0              LISTENING       12
+  TCP    [::bad                 [::]:0                 LISTENING       12
+  TCP    127.0.0.1:0            0.0.0.0:0              LISTENING       12
+  TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       42
+Active Connections
+  Proto  Local Address          Foreign Address        State           PID
