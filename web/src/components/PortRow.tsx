@@ -1,16 +1,26 @@
-import { dockerStopCommand, isDashboardPort, processName, projectLabel, rowKind, type RowKind } from "../classify.js";
+import {
+  dockerStopCommand,
+  isDashboardPort,
+  processName,
+  projectLabel,
+  rowKind,
+  UNIDENTIFIED_TITLE,
+  type RowKind,
+} from "../classify.js";
 import type { Listener } from "../types.js";
 
 const BORDER: Record<RowKind, string> = {
   dev: "border-l-[var(--dev)]",
   docker: "border-l-[var(--docker)]",
   system: "border-l-[var(--system)]",
+  unidentified: "border-l-[var(--line)]",
 };
 
 const TAG: Record<RowKind, string> = {
   dev: "text-[var(--dev)]",
   docker: "text-[var(--docker)]",
   system: "text-[var(--system)]",
+  unidentified: "text-[var(--muted)]",
 };
 
 export function PortRow({
@@ -86,6 +96,17 @@ export function PortRow({
   );
 }
 
+/** The wrapper takes focus so the reason in the tooltip is reachable from the keyboard. */
+function DisabledStop({ reason }: { reason: string }) {
+  return (
+    <span tabIndex={0} title={reason} className="inline-flex" onClick={(event) => event.stopPropagation()}>
+      <button type="button" disabled className="h-8 cursor-not-allowed rounded border border-[var(--line)] px-2 text-sm text-[var(--muted)]">
+        Stop
+      </button>
+    </span>
+  );
+}
+
 function RowAction({
   own,
   kind,
@@ -116,25 +137,9 @@ function RowAction({
     );
   }
 
-  if (own) {
-    return (
-      <span tabIndex={0} title="This dashboard" className="inline-flex" onClick={(event) => event.stopPropagation()}>
-        <button type="button" disabled className="h-8 cursor-not-allowed rounded border border-[var(--line)] px-2 text-sm text-[var(--muted)]">
-          Stop
-        </button>
-      </span>
-    );
-  }
-
-  if (kind === "system") {
-    return (
-      <span tabIndex={0} title="System process. Handle from the CLI." className="inline-flex" onClick={(event) => event.stopPropagation()}>
-        <button type="button" disabled className="h-8 cursor-not-allowed rounded border border-[var(--line)] px-2 text-sm text-[var(--muted)]">
-          Stop
-        </button>
-      </span>
-    );
-  }
+  if (own) return <DisabledStop reason="This dashboard" />;
+  if (kind === "system") return <DisabledStop reason="System process. Handle from the CLI." />;
+  if (kind === "unidentified") return <DisabledStop reason={UNIDENTIFIED_TITLE} />;
 
   return (
     <button

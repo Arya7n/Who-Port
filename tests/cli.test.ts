@@ -179,6 +179,37 @@ test("refuses a protected process when there is no terminal", async () => {
   assert.match(cap.errors.join("\n"), /protected/);
 });
 
+test("a process whose name could not be read is never stopped", async () => {
+  const calls: string[] = [];
+  const cap = capture();
+  const code = await main(
+    ["3000", "--kill", "--yes"],
+    cap.io,
+    deps({
+      listListeners: async () => ({
+        listeners: [{ ...nodeListener(), command: "" }],
+        warnings: ["tasklist failed. Process names will be missing."],
+      }),
+      runner: {
+        async terminate() {
+          calls.push("term");
+          return { ok: true };
+        },
+        async force() {
+          calls.push("force");
+          return { ok: true };
+        },
+        async running() {
+          return false;
+        },
+      },
+    }),
+  );
+  assert.equal(code, 1);
+  assert.deepEqual(calls, []);
+  assert.match(cap.errors.join("\n"), /Couldn't identify this process\. Try again\./);
+});
+
 test("a terminal can inspect a row and leave it alone", async () => {
   const prompts: string[] = [];
   const answers = ["1", "n"];

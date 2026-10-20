@@ -9,6 +9,7 @@ import { listContainers } from "../docker.js";
 import { ToolError } from "../errors.js";
 import type { PortView } from "../inspect.js";
 import { createPosixRunner, isContainerName, isProtectedProcess, stopProcess, windowsRunner, type ProcessRunner } from "../kill.js";
+import { UNIDENTIFIED_MESSAGE } from "../kinds.js";
 import { listListeners } from "../platform/index.js";
 import { parsePort, PortError } from "../port.js";
 import { formatListenersJson } from "../report.js";
@@ -121,6 +122,8 @@ export function planKill(views: readonly PortView[], pid: number): KillPlan {
     const command = owned.find((view) => view.command.length > 0)?.command ?? "This process";
     return refuse(403, `${command} (PID ${pid}) is protected. Handle it from the CLI.`);
   }
+
+  if (owned.some((view) => view.kind === "unidentified")) return refuse(409, UNIDENTIFIED_MESSAGE);
 
   return { action: "stop", pid };
 }

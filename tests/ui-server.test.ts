@@ -390,6 +390,26 @@ test("a confirmed stop forces a process Windows will not stop gracefully", async
   });
 });
 
+test("a pid with no readable name is refused and the runner is not called", async () => {
+  const calls: string[] = [];
+  const unnamed = { ...nodeListener(), command: "" };
+  await withServer(options({ source: source([unnamed]), runner: runner(calls) }), async (port) => {
+    const response = await request(port, {
+      path: "/api/kill",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"pid":18432}',
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(JSON.parse(response.body), { ok: false, message: "Couldn't identify this process. Try again." });
+    assert.deepEqual(calls, []);
+
+    const list = await request(port, { path: "/api/ports" });
+    const row = (JSON.parse(list.body) as { listeners: { kind: string }[] }).listeners[0];
+    assert.equal(row?.kind, "unidentified");
+  });
+});
+
 test("access denied is worded for the browser", async () => {
   const denied: ProcessRunner = {
     async terminate() {

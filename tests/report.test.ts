@@ -17,6 +17,7 @@ function view(overrides: Partial<PortView> = {}): PortView {
     project: { name: "chat-service", root: "C:\\code\\chat-service" },
     docker: null,
     protected: false,
+    kind: "dev",
     verdict: "Looks like a stale node.exe from chat-service (2h ago). Safe to stop.",
     ...overrides,
   };
@@ -47,6 +48,7 @@ test("prints a docker publish without the proxy command", () => {
         project: null,
         uptime: null,
         docker: { name: "patent-dev-redis-1", image: "redis:7-alpine", project: "patent-dev", service: "redis" },
+        kind: "docker",
         verdict: "Docker container patent-dev-redis-1 (redis:7-alpine), compose patent-dev/redis. Stop it with docker stop patent-dev-redis-1.",
       }),
     ],
@@ -69,6 +71,7 @@ test("renders the --all table without color", () => {
         project: null,
         uptime: "unknown",
         docker: { name: "patent-dev-redis-1", image: "redis:7-alpine", project: "patent-dev", service: "redis" },
+        kind: "docker",
         verdict: "docker",
       }),
       view({
@@ -80,6 +83,7 @@ test("renders the --all table without color", () => {
         project: null,
         uptime: "2w ago",
         protected: true,
+        kind: "system",
         verdict: "protected",
       }),
     ],

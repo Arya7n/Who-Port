@@ -25,6 +25,7 @@ function row(overrides: Partial<Listener> = {}): Listener {
     project: { name: "whoport", root: "C:\\Users\\Aryan\\code\\Who-Port" },
     docker: null,
     protected: false,
+    kind: "dev",
     verdict: "Looks like node.exe from whoport. Safe to stop.",
     ...overrides,
   };
@@ -36,6 +37,7 @@ const docker = row({
   command: "com.docker.backend.exe",
   project: null,
   protected: true,
+  kind: "docker",
   docker: { name: "patent-dev-postgres-1", image: "pgvector/pgvector:pg16", project: "patent-dev", service: "postgres" },
 });
 
@@ -45,14 +47,28 @@ const system = row({
   command: "svchost.exe",
   project: null,
   protected: true,
+  kind: "system",
   commandLine: null,
   verdict: "svchost.exe is a system process.",
 });
 
-test("row kind prefers docker, then protected, then dev", () => {
+const nameless = row({ port: 8080, pid: 7000, command: "", project: null, kind: "unidentified" });
+
+test("row kind comes from the server", () => {
   assert.equal(rowKind(docker), "docker");
   assert.equal(rowKind(system), "system");
   assert.equal(rowKind(row()), "dev");
+  assert.equal(rowKind(nameless), "unidentified");
+});
+
+test("an unidentified row stays visible with Dev and is counted on its own", () => {
+  const rows = [row(), nameless, system];
+  assert.deepEqual(counts(rows), { dev: 1, docker: 0, system: 1, unidentified: 1 });
+  assert.deepEqual(
+    visibleRows(rows, DEFAULT_FILTER).map((item) => item.port),
+    [3000, 8080],
+  );
+  assert.equal(processName(nameless), "(unknown)");
 });
 
 test("labels name the container and the compose project, never the forwarder", () => {
@@ -65,7 +81,7 @@ test("labels name the container and the compose project, never the forwarder", (
 
 test("default view keeps dev and docker and hides system", () => {
   const rows = [system, row({ port: 4000 }), docker];
-  assert.deepEqual(counts(rows), { dev: 1, docker: 1, system: 1 });
+  assert.deepEqual(counts(rows), { dev: 1, docker: 1, system: 1, unidentified: 0 });
   assert.deepEqual(
     visibleRows(rows, DEFAULT_FILTER).map((item) => item.port),
     [4000, 5432],

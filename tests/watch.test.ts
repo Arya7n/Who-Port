@@ -53,6 +53,7 @@ test("a docker publish is named by the container", () => {
     project: null,
     docker: { name: "patent-dev-redis-1", image: "redis:7-alpine", project: "patent-dev", service: "redis" },
     protected: true,
+    kind: "docker",
     verdict: "",
   };
   assert.deepEqual(snapshotFromViews([view]).owners, [

@@ -12,6 +12,8 @@ export interface DockerInfo {
   service: string | null;
 }
 
+export type RowKind = "dev" | "docker" | "system" | "unidentified";
+
 export interface Listener {
   port: number;
   pid: number;
@@ -24,6 +26,7 @@ export interface Listener {
   project: ProjectInfo | null;
   docker: DockerInfo | null;
   protected: boolean;
+  kind: RowKind;
   verdict: string;
 }
 

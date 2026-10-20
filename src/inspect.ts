@@ -1,5 +1,6 @@
 import type { ContainerInfo } from "./docker.js";
 import { isProtectedProcess } from "./kill.js";
+import { rowKind, type RowKind } from "./kinds.js";
 import type { Listener } from "./platform/types.js";
 import {
   formatUptime,
@@ -21,6 +22,7 @@ export interface PortView {
   project: ResolvedProject | null;
   docker: ContainerInfo | null;
   protected: boolean;
+  kind: RowKind;
   verdict: string;
 }
 
@@ -58,6 +60,9 @@ export function describeVerdict(view: Omit<PortView, "verdict">, now: Date): str
   const name = view.command.length > 0 ? view.command : "(unknown)";
   if (view.protected) {
     return `${name} is a system process (PID ${view.pid}). Stopping it can take down the machine.`;
+  }
+  if (view.kind === "unidentified") {
+    return `Could not read the name of PID ${view.pid}, so whoport will not stop it. Try again.`;
   }
 
   const age = view.startedAt === null ? Number.NaN : now.getTime() - Date.parse(view.startedAt);
@@ -107,6 +112,7 @@ export function buildViews(
     const info = details.get(listener.pid) ?? null;
     const project = docker || info === null ? null : resolveProject(info, fs);
     const command = imageName(listener, info);
+    const isProtected = isProtectedProcess(listener.pid, command, info?.executablePath ?? null, systemRoot);
     const partial = {
       port: listener.port,
       pid: listener.pid,
@@ -118,7 +124,8 @@ export function buildViews(
       uptime: info?.startTime ? formatUptime(info.startTime, now) : null,
       project,
       docker,
-      protected: isProtectedProcess(listener.pid, command, info?.executablePath ?? null, systemRoot),
+      protected: isProtected,
+      kind: rowKind({ docker, protected: isProtected, command, project }),
     };
     views.push({ ...partial, verdict: describeVerdict(partial, now) });
   }
@@ -131,7 +138,7 @@ export type KillTarget =
   | { kind: "none" }
   | { kind: "mixed" }
   | { kind: "docker"; name: string }
-  | { kind: "process"; pid: number; command: string; protected: boolean };
+  | { kind: "process"; pid: number; command: string; protected: boolean; identified: boolean };
 
 /** One port may be two addresses of one owner, or two owners. Only the first is safe to stop in one step. */
 export function sharedTarget(views: readonly PortView[]): KillTarget {
@@ -146,7 +153,13 @@ export function sharedTarget(views: readonly PortView[]): KillTarget {
   if (dockerNames.size === 0 && pids.size === 1) {
     const view = views[0];
     if (!view) return { kind: "none" };
-    return { kind: "process", pid: view.pid, command: processLabel(view), protected: view.protected };
+    return {
+      kind: "process",
+      pid: view.pid,
+      command: processLabel(view),
+      protected: view.protected,
+      identified: view.kind !== "unidentified",
+    };
   }
   return { kind: "mixed" };
 }

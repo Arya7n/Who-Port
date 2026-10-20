@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 import { listContainers } from "./docker.js";
 import { ToolError } from "./errors.js";
 import { sharedTarget, type KillTarget, type PortView } from "./inspect.js";
+import { UNIDENTIFIED_MESSAGE } from "./kinds.js";
 import {
   createPosixRunner,
   dockerStop,
@@ -186,6 +187,9 @@ async function performStop(
   io: CliIO,
   json: boolean,
 ): Promise<number> {
+  if (target.kind === "process" && !target.identified) {
+    return finishKill(port, false, "refused", UNIDENTIFIED_MESSAGE, io, json, 1);
+  }
   const answer = await confirmStop(target, deps, yes);
   if (answer === "blocked") {
     const message =

@@ -1,6 +1,8 @@
-import type { Listener } from "./types.js";
+import type { Listener, RowKind } from "./types.js";
 
-export type RowKind = "dev" | "docker" | "system";
+export type { RowKind };
+
+export const UNIDENTIFIED_TITLE = "Couldn't identify this process. Try again.";
 
 export interface ViewFilter {
   dev: boolean;
@@ -16,11 +18,9 @@ export function rowKey(row: Pick<Listener, "port" | "pid">): string {
   return `${row.port}:${row.pid}`;
 }
 
-/** Docker wins over the forwarder's protected flag. Otherwise protected means system. */
-export function rowKind(row: Pick<Listener, "docker" | "protected">): RowKind {
-  if (row.docker) return "docker";
-  if (row.protected) return "system";
-  return "dev";
+/** The server decides the kind, so the CLI and the dashboard agree. */
+export function rowKind(row: Pick<Listener, "kind">): RowKind {
+  return row.kind;
 }
 
 export function processName(row: Pick<Listener, "docker" | "command">): string {
@@ -46,8 +46,10 @@ export function isDashboardPort(rowPort: number, pagePort: number | null): boole
   return pagePort !== null && rowPort === pagePort;
 }
 
-export function counts(rows: readonly Listener[]): { dev: number; docker: number; system: number } {
-  const tally = { dev: 0, docker: 0, system: 0 };
+export type Tally = Record<RowKind, number>;
+
+export function counts(rows: readonly Pick<Listener, "kind">[]): Tally {
+  const tally: Tally = { dev: 0, docker: 0, system: 0, unidentified: 0 };
   for (const row of rows) tally[rowKind(row)] += 1;
   return tally;
 }
@@ -68,8 +70,9 @@ function matchesQuery(row: Listener, query: string): boolean {
   return haystack.includes(needle);
 }
 
+/** An unidentified row may be a dev server whose name could not be read, so it shows with Dev. */
 function kindSelected(kind: RowKind, filter: ViewFilter): boolean {
-  if (kind === "dev") return filter.dev;
+  if (kind === "dev" || kind === "unidentified") return filter.dev;
   if (kind === "docker") return filter.docker;
   return filter.system;
 }
