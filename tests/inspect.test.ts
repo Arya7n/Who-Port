@@ -45,7 +45,10 @@ test("a published container replaces the proxy as the owner", () => {
 
   assert.equal(views.length, 1);
   assert.equal(projectLabel(views[0]!), "patent-dev/redis");
-  assert.match(views[0]!.verdict, /docker stop patent-dev-redis-1/);
+  assert.equal(
+    views[0]!.verdict,
+    "Docker container patent-dev-redis-1 (redis:7-alpine), compose patent-dev/redis. Stop it with docker stop patent-dev-redis-1.",
+  );
   assert.deepEqual(sharedTarget(views), { kind: "docker", name: "patent-dev-redis-1" });
 });
 
