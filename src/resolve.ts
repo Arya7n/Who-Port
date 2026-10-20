@@ -385,29 +385,73 @@ export async function readWindowsProcesses(pids: readonly number[]): Promise<Map
 
 export type ProcessReader = (pids: readonly number[]) => Promise<Map<number, ProcessDetails>>;
 
-/** A pid that came back without a name is not cached, so the next poll asks again. */
+function isComplete(details: ProcessDetails): boolean {
+  return Boolean(details.name) && details.startTime !== null;
+}
+
+function sameName(a: ProcessDetails, b: ProcessDetails): boolean {
+  return (a.name ?? "").toLowerCase() === (b.name ?? "").toLowerCase();
+}
+
+/**
+ * Only complete answers are cached: the tasklist fallback after a CIM timeout has a name
+ * but no start time, command line or path. Past the ttl a complete answer is still kept
+ * for a pid that keeps listening, and stands in when a later lookup comes back degraded,
+ * so one slow PowerShell does not blank the project and uptime. Overlapping callers share
+ * one lookup, since parallel PowerShells are what push it past the timeout.
+ */
 export function cacheProcessReads(read: ProcessReader, ttlMs: number, now: () => number = Date.now): ProcessReader {
   const cache = new Map<number, { at: number; details: ProcessDetails }>();
+  const inflight = new Map<number, Promise<Map<number, ProcessDetails>>>();
   return async (pids) => {
     const at = now();
-    for (const [pid, entry] of cache) {
-      if (at - entry.at >= ttlMs) cache.delete(pid);
+    const asked = new Set(pids);
+    for (const pid of cache.keys()) {
+      if (!asked.has(pid)) cache.delete(pid);
     }
+
     const result = new Map<number, ProcessDetails>();
     const missing: number[] = [];
+    const waiting = new Set<Promise<Map<number, ProcessDetails>>>();
     for (const pid of pids) {
       const entry = cache.get(pid);
-      if (entry) result.set(pid, entry.details);
+      if (entry && at - entry.at < ttlMs) {
+        result.set(pid, entry.details);
+        continue;
+      }
+      const pending = inflight.get(pid);
+      if (pending) waiting.add(pending);
       else missing.push(pid);
     }
-    if (missing.length === 0) return result;
 
-    const fresh = await read(missing);
-    // Timed from the answer, so a slow lookup does not use up the ttl.
-    const answeredAt = now();
-    for (const [pid, details] of fresh) {
-      result.set(pid, details);
-      if (details.name) cache.set(pid, { at: answeredAt, details });
+    if (missing.length > 0) {
+      const lookup = read(missing)
+        .then((fresh) => {
+          // Timed from the answer, so a slow lookup does not use up the ttl.
+          const answeredAt = now();
+          for (const [pid, details] of fresh) {
+            if (isComplete(details)) cache.set(pid, { at: answeredAt, details });
+          }
+          return fresh;
+        })
+        .finally(() => {
+          for (const pid of missing) {
+            if (inflight.get(pid) === lookup) inflight.delete(pid);
+          }
+        });
+      for (const pid of missing) inflight.set(pid, lookup);
+      waiting.add(lookup);
+    }
+    if (waiting.size === 0) return result;
+
+    const answers = await Promise.all(waiting);
+    for (const pid of pids) {
+      if (result.has(pid)) continue;
+      const fresh = answers.find((answer) => answer.has(pid))?.get(pid);
+      const kept = cache.get(pid)?.details;
+      if (fresh && isComplete(fresh)) result.set(pid, fresh);
+      else if (kept && (!fresh || sameName(kept, fresh))) result.set(pid, kept);
+      else if (fresh) result.set(pid, fresh);
     }
     return result;
   };

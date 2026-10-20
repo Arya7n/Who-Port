@@ -276,7 +276,13 @@ test("caches named details per pid and asks again after the ttl", async () => {
       return new Map(
         pids.map((pid) => [
           pid,
-          { name: pid === 7 ? null : "node.exe", commandLine: null, executablePath: null, startTime: null, cwd: null },
+          {
+            name: pid === 7 ? null : "node.exe",
+            commandLine: null,
+            executablePath: null,
+            startTime: pid === 7 ? null : new Date(0),
+            cwd: null,
+          },
         ]),
       );
     },
@@ -292,6 +298,102 @@ test("caches named details per pid and asks again after the ttl", async () => {
   clock = 8_000;
   await read([1]);
   assert.deepEqual(asked, [[1, 7], [7, 9], [1]]);
+});
+
+test("a tasklist-only answer is not cached and does not replace the last full answer", async () => {
+  let clock = 0;
+  let degraded = false;
+  const asked: number[][] = [];
+  const read = cacheProcessReads(
+    async (pids) => {
+      asked.push([...pids]);
+      return new Map(
+        pids.map((pid) => [
+          pid,
+          degraded
+            ? { name: "node.exe", commandLine: null, executablePath: null, startTime: null, cwd: null }
+            : {
+                name: "node.exe",
+                commandLine: "node C:\\app\\server.js",
+                executablePath: "C:\\node.exe",
+                startTime: new Date(0),
+                cwd: null,
+              },
+        ]),
+      );
+    },
+    5_000,
+    () => clock,
+  );
+
+  await read([1]);
+  degraded = true;
+  clock = 6_000;
+  const slow = await read([1]);
+  assert.equal(slow.get(1)?.commandLine, "node C:\\app\\server.js");
+  assert.equal(slow.get(1)?.startTime?.getTime(), 0);
+
+  // The degraded answer was not cached, so the next poll asks again.
+  clock = 7_000;
+  await read([1]);
+  assert.deepEqual(asked, [[1], [1], [1]]);
+});
+
+test("a kept answer is dropped once the pid stops listening or changes name", async () => {
+  let clock = 0;
+  let name = "node.exe";
+  let degraded = false;
+  const read = cacheProcessReads(
+    async (pids) =>
+      new Map(
+        pids.map((pid) => [
+          pid,
+          { name, commandLine: null, executablePath: null, startTime: degraded ? null : new Date(0), cwd: null },
+        ]),
+      ),
+    5_000,
+    () => clock,
+  );
+
+  await read([1]);
+  degraded = true;
+  name = "python.exe";
+  clock = 6_000;
+  assert.equal((await read([1])).get(1)?.startTime, null);
+
+  name = "node.exe";
+  degraded = false;
+  await read([2]);
+  degraded = true;
+  await read([3]);
+  clock = 12_000;
+  assert.equal((await read([2])).get(2)?.startTime, null);
+});
+
+test("overlapping reads share one lookup", async () => {
+  let calls = 0;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const read = cacheProcessReads(async (pids) => {
+    calls += 1;
+    await gate;
+    return new Map(
+      pids.map((pid) => [
+        pid,
+        { name: "node.exe", commandLine: null, executablePath: null, startTime: new Date(0), cwd: null },
+      ]),
+    );
+  }, 5_000);
+
+  const first = read([1, 2]);
+  const second = read([1, 2]);
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(calls, 1);
+  assert.equal(a.get(2)?.name, "node.exe");
+  assert.equal(b.get(1)?.name, "node.exe");
 });
 
 test("parses a CIM array and ignores malformed output", () => {

@@ -25,18 +25,25 @@ export function usePorts(): PortsState {
   useEffect(() => {
     let timer = 0;
     let stopped = false;
+    let loading: Promise<void> | null = null;
 
-    const load = async (): Promise<void> => {
-      try {
-        const body = await fetchPorts();
-        if (stopped) return;
-        setListeners(body.listeners);
-        setFailed(false);
-        setUpdatedAt(new Date());
-      } catch {
-        if (stopped) return;
-        setFailed(true);
-      }
+    // A focus event during a poll joins it instead of starting a second server lookup.
+    const load = (): Promise<void> => {
+      loading ??= (async () => {
+        try {
+          const body = await fetchPorts();
+          if (stopped) return;
+          setListeners(body.listeners);
+          setFailed(false);
+          setUpdatedAt(new Date());
+        } catch {
+          if (stopped) return;
+          setFailed(true);
+        } finally {
+          loading = null;
+        }
+      })();
+      return loading;
     };
 
     const schedule = (): void => {
