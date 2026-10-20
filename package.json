@@ -2,21 +2,44 @@
   "name": "whoport",
   "version": "0.1.0",
   "private": true,
-  "description": "Show which process is listening on a TCP port.",
+  "description": "Show which process is listening on a TCP port, which project it belongs to, and stop it safely.",
+  "keywords": [
+    "port",
+    "kill-port",
+    "process",
+    "netstat",
+    "docker",
+    "cli",
+    "windows",
+    "dev-server",
+    "dashboard"
+  ],
+  "license": "MIT",
+  "author": "Arya7n <aryan11jr@gmail.com>",
   "type": "module",
   "engines": {
     "node": ">=18"
   },
   "bin": {
-    "whoport": "./dist/cli.js"
+    "whoport": "dist/cli.js"
   },
+  "files": [
+    "dist/",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "tsc && vite build --config web/vite.config.ts",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc && vite build --config web/vite.config.ts",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm test && npm run build",
     "dev:ui": "vite --config web/vite.config.ts",
     "whoport": "tsx src/cli.ts",
     "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts tests/resolve.test.ts tests/docker.test.ts tests/kill.test.ts tests/inspect.test.ts tests/report.test.ts tests/cli.test.ts tests/linux.test.ts tests/darwin.test.ts tests/watch.test.ts tests/ui-server.test.ts tests/ui-static.test.ts tests/classify.test.ts tests/kinds.test.ts",
     "typecheck": "tsc --noEmit && tsc -p web/tsconfig.json --noEmit"
   },
+  "dependencies": {},
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.10.1",

@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { main } from "../src/cli.js";
 import { classifyStaticUrl, fileInsideRoot, staticCacheControl, staticContentType } from "../src/ui/static.js";
-import { startUiServer, UI_ASSETS_MISSING } from "../src/ui/server.js";
+import { defaultUiRoot, startUiServer, UI_ASSETS_MISSING } from "../src/ui/server.js";
 
 test("rejects traversal before a file is chosen", () => {
   const attacks = [
@@ -152,4 +153,18 @@ test("ui without a build tells you to run npm run build", async () => {
   });
   assert.equal(code, 1);
   assert.equal(errors.join("\n"), UI_ASSETS_MISSING);
+});
+
+test("the dashboard root comes from the server module, not the working directory", async () => {
+  const expected = resolve(fileURLToPath(new URL("../dist/ui", import.meta.url)));
+  const before = process.cwd();
+  const elsewhere = await mkdtemp(join(tmpdir(), "whoport-cwd-"));
+  try {
+    process.chdir(elsewhere);
+    assert.notEqual(resolve(process.cwd()), resolve(before));
+    assert.equal(resolve(defaultUiRoot()), expected);
+  } finally {
+    process.chdir(before);
+    await rm(elsewhere, { recursive: true, force: true });
+  }
 });
