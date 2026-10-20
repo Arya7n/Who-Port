@@ -11,14 +11,33 @@
     "whoport": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && vite build --config web/vite.config.ts",
+    "dev:ui": "vite --config web/vite.config.ts",
     "whoport": "tsx src/cli.ts",
-    "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts tests/resolve.test.ts tests/docker.test.ts tests/kill.test.ts tests/inspect.test.ts tests/report.test.ts tests/cli.test.ts tests/linux.test.ts tests/darwin.test.ts tests/watch.test.ts tests/ui-server.test.ts",
-    "typecheck": "tsc --noEmit"
+    "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts tests/resolve.test.ts tests/docker.test.ts tests/kill.test.ts tests/inspect.test.ts tests/report.test.ts tests/cli.test.ts tests/linux.test.ts tests/darwin.test.ts tests/watch.test.ts tests/ui-server.test.ts tests/classify.test.ts",
+    "typecheck": "tsc --noEmit && tsc -p web/tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.10.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4"
+  },
+  "notes": {
+    "react": "Dashboard components. Compiled into static files; the CLI never imports it.",
+    "react-dom": "Mounts the dashboard in the browser. Not a server dependency.",
+    "@types/react": "Types for the dashboard components.",
+    "@types/react-dom": "Types for the dashboard mount.",
+    "vite": "Bundles the dashboard into dist/ui.",
+    "@vitejs/plugin-react": "Compiles the dashboard JSX in the Vite build.",
+    "tailwindcss": "Utility styles for the dashboard, emitted as one CSS file.",
+    "@tailwindcss/vite": "Official Tailwind plugin for that Vite build."
   }
 }
