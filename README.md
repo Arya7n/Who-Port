@@ -1,5 +1,7 @@
 # whoport
 
+![whoport dashboard](docs/dashboard.png)
+
 ## What annoyed me
 
 I start a Nest service and get `EADDRINUSE: port 3000`. Then I copy a PID out of `netstat` and try to work out whether it's a stale `ts-node` from another repo or something I still need. `kill-port` just kills it. What I wanted to know was *what* holds the port, *which project* it belongs to, and whether it's safe to stop.
@@ -15,16 +17,16 @@ container patent-dev-redis-1 (redis:7-alpine), compose patent-dev/redis
 Stop it with docker stop patent-dev-redis-1.
 ```
 
-- `whoport` lists every listening port. `--kill` asks before stopping anything.
+- `whoport` lists every listening port, tagged DEV, DOCKER, OTHER or SYSTEM. `--kill` asks before stopping anything.
 - `whoport watch 3000 --until-free && npm start` waits for the port to free up.
 - `whoport ui` opens a local dashboard to filter ports and stop them with one click.
 
-Safety: system processes are protected, a process whoport can't identify is never stopped, and containers get `docker stop`, never a kill on the forwarder. The dashboard binds to 127.0.0.1 and rejects foreign `Host` and `Origin` headers.
+Safety: system processes are protected, a process whoport can't identify is never stopped, the process is re-checked right before stopping, and containers get `docker stop`, never a kill on the forwarder. The dashboard binds to 127.0.0.1 and rejects foreign `Host` and `Origin` headers.
 
 The CLI and server have zero runtime dependencies. React and Tailwind are build-time only.
 
 ```
-npm install && npm test && npm run build
+npm install && npm run build
 node dist/cli.js ui
 ```
 
@@ -34,4 +36,4 @@ No process-tree killing, no auto-restart, no Electron. I parse `netstat`, `ss` a
 
 ## What I'd do next
 
-A tray icon or autostart for the dashboard, UDP ports, and real Linux and macOS test runs.
+Publish to npm so `npx` works without cloning (the plain name is taken, so it needs a scoped one), add UDP ports, and run real Linux and macOS tests.
