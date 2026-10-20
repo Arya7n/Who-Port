@@ -1,3 +1,5 @@
+import type { CSSProperties, ReactNode } from "react";
+
 import {
   dockerStopCommand,
   isDashboardPort,
@@ -8,21 +10,24 @@ import {
   type RowKind,
 } from "../classify.js";
 import type { Listener } from "../types.js";
+import { CheckIcon, ChevronIcon, CopyIcon, LockIcon, SpinnerIcon, StopIcon } from "./Icons.js";
 
-const BORDER: Record<RowKind, string> = {
-  dev: "border-l-[var(--dev)]",
-  docker: "border-l-[var(--docker)]",
-  other: "border-l-[var(--other)]",
-  system: "border-l-[var(--system)]",
-  unidentified: "border-l-[var(--line)]",
+/** The colored edge on the port cell. The text badge carries the same kind, so color is never alone. */
+const EDGE: Record<RowKind, string> = {
+  dev: "shadow-[inset_3px_0_0_var(--dev)]",
+  docker: "shadow-[inset_3px_0_0_var(--docker)]",
+  other: "shadow-[inset_3px_0_0_var(--other)]",
+  system: "shadow-[inset_3px_0_0_var(--system)]",
+  unidentified: "shadow-[inset_3px_0_0_var(--line)]",
 };
 
-const TAG: Record<RowKind, string> = {
-  dev: "text-[var(--dev)]",
-  docker: "text-[var(--docker)]",
-  other: "text-[var(--other)]",
-  system: "text-[var(--system)]",
-  unidentified: "text-[var(--muted)]",
+const BADGE: Record<RowKind | "own", string> = {
+  dev: "var(--dev)",
+  docker: "var(--docker)",
+  other: "var(--other)",
+  system: "var(--system)",
+  unidentified: "var(--muted)",
+  own: "var(--focus)",
 };
 
 export function PortRow({
@@ -55,7 +60,9 @@ export function PortRow({
   return (
     <>
       <tr
-        className={`border-b border-[var(--line)] ${fading ? "opacity-0" : ""} transition-opacity duration-200`}
+        className={`group cursor-pointer border-b border-line transition-[opacity,background-color] duration-200 hover:bg-subtle/70 ${
+          open ? "bg-subtle/70" : ""
+        } ${fading ? "opacity-0" : ""}`}
         onClick={onToggle}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -66,23 +73,32 @@ export function PortRow({
         tabIndex={0}
         aria-expanded={open}
       >
-        <td className={`border-l-2 py-2 pr-2 pl-3 font-mono text-sm font-semibold ${BORDER[kind]}`}>{row.port}</td>
-        <td className="px-2 py-2">
-          <div className="flex items-baseline gap-2">
-            <span className={`text-[11px] font-medium tracking-wide ${own ? "text-[var(--muted)]" : TAG[kind]}`}>{tag}</span>
-            <span>{processName(row)}</span>
-          </div>
-          {row.docker ? <div className="text-xs text-[var(--muted)]">{row.docker.image}</div> : null}
+        <td className={`py-3 pr-3 pl-5 ${EDGE[kind]}`}>
+          <span className="flex items-center gap-1.5">
+            <ChevronIcon
+              className={`h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+            />
+            <span className="font-mono text-[13px] font-semibold tabular-nums">{row.port}</span>
+          </span>
         </td>
-        <td className="px-2 py-2">
+        <td className="px-3 py-3">
+          <div className="flex items-center gap-2">
+            <span className="badge" style={{ "--badge": BADGE[own ? "own" : kind] } as CSSProperties}>
+              {tag}
+            </span>
+            <span className="truncate font-medium">{processName(row)}</span>
+          </div>
+          {row.docker ? <div className="mt-0.5 truncate font-mono text-xs text-muted">{row.docker.image}</div> : null}
+        </td>
+        <td className="px-3 py-3">
           {project ?? (
-            <span className="text-[var(--muted)]" title="unknown: Windows did not expose a command line">
+            <span className="text-muted" title="unknown: Windows did not expose a command line">
               —
             </span>
           )}
         </td>
-        <td className="px-2 py-2 text-[var(--muted)]">{row.uptime ?? "unknown"}</td>
-        <td className="px-2 py-2 text-right">
+        <td className="px-3 py-3 text-muted tabular-nums">{row.uptime ?? "unknown"}</td>
+        <td className="py-3 pr-5 pl-3 text-right">
           <RowAction
             own={own}
             kind={kind}
@@ -95,12 +111,29 @@ export function PortRow({
         </td>
       </tr>
       {open ? (
-        <tr>
-          <td colSpan={5} className="border-l-2 border-[var(--line)] bg-[var(--bg)] px-4 py-3">
-            <p className="font-mono text-xs break-all whitespace-pre-wrap select-text">
-              {row.commandLine && row.commandLine.length > 0 ? row.commandLine : "No command line."}
-            </p>
-            <p className="mt-2 text-sm">{row.verdict}</p>
+        <tr className="border-b border-line bg-subtle/40">
+          <td colSpan={5} className={`px-5 py-4 ${EDGE[kind]}`}>
+            <div className="fade-in grid gap-4 pl-5">
+              <Detail label="Command line">
+                <pre className="max-h-40 overflow-auto rounded-lg border border-line bg-bg p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap select-text">
+                  {row.commandLine && row.commandLine.length > 0 ? row.commandLine : "No command line."}
+                </pre>
+              </Detail>
+              <div className="grid grid-cols-3 gap-4">
+                <Detail label="PID">
+                  <span className="font-mono text-[13px]">{row.pid}</span>
+                </Detail>
+                <Detail label="Address">
+                  <span className="font-mono text-[13px]">{row.addresses.join(", ")}</span>
+                </Detail>
+                <Detail label="Started">
+                  <span className="text-[13px]">{row.startedAt ? new Date(row.startedAt).toLocaleString() : "unknown"}</span>
+                </Detail>
+              </div>
+              <Detail label="Verdict">
+                <p className="text-[13px]">{row.verdict}</p>
+              </Detail>
+            </div>
           </td>
         </tr>
       ) : null}
@@ -108,11 +141,24 @@ export function PortRow({
   );
 }
 
+function Detail({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-[11px] font-semibold tracking-wider text-muted uppercase">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+const BUTTON =
+  "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium whitespace-nowrap transition-colors";
+
 /** The wrapper takes focus so the reason in the tooltip is reachable from the keyboard. */
 function DisabledStop({ reason }: { reason: string }) {
   return (
-    <span tabIndex={0} title={reason} className="inline-flex" onClick={(event) => event.stopPropagation()}>
-      <button type="button" disabled className="h-8 cursor-not-allowed rounded border border-[var(--line)] px-2 text-sm text-[var(--muted)]">
+    <span tabIndex={0} title={reason} className="inline-flex rounded-lg" onClick={(event) => event.stopPropagation()}>
+      <button type="button" disabled className={`${BUTTON} cursor-not-allowed border-line text-muted opacity-60`}>
+        <LockIcon className="h-3.5 w-3.5" />
         Stop
       </button>
     </span>
@@ -144,8 +190,11 @@ function RowAction({
           event.stopPropagation();
           onCopy();
         }}
-        className="h-8 rounded border border-[var(--line)] bg-[var(--surface)] px-2 text-sm"
+        className={`${BUTTON} ${
+          copied ? "border-dev/40 bg-dev/10 text-dev" : "border-line bg-surface hover:border-docker/40 hover:bg-docker/10 hover:text-docker"
+        }`}
       >
+        {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
         {copied ? "Copied" : "Copy docker stop"}
       </button>
     );
@@ -163,8 +212,9 @@ function RowAction({
         event.stopPropagation();
         onStop();
       }}
-      className="h-8 rounded border border-[var(--line)] bg-[var(--surface)] px-2 text-sm disabled:cursor-wait disabled:text-[var(--muted)]"
+      className={`${BUTTON} border-line bg-surface hover:border-danger/40 hover:bg-danger/10 hover:text-danger disabled:cursor-wait disabled:border-line disabled:bg-subtle disabled:text-muted`}
     >
+      {stopping ? <SpinnerIcon className="h-3.5 w-3.5" /> : <StopIcon className="h-3.5 w-3.5" />}
       {stopping ? "Stopping…" : "Stop"}
     </button>
   );

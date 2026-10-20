@@ -33,6 +33,7 @@ export function usePorts(): PortsState {
         if (stopped) return;
         setListeners(body.listeners);
         setFailed(false);
+        setUpdatedAt(new Date());
       } catch {
         if (stopped) return;
         setFailed(true);
@@ -66,5 +67,5 @@ export function usePorts(): PortsState {
     };
   }, [tick]);
 
-  return { listeners, failed, retry };
+  return { listeners, failed, updatedAt, retry };
 }

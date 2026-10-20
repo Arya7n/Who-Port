@@ -19,7 +19,7 @@ function pagePort(): number | null {
 }
 
 export function App() {
-  const { listeners, failed, retry } = usePorts();
+  const { listeners, failed, updatedAt, retry } = usePorts();
   const [filter, setFilter] = useState<ViewFilter>(DEFAULT_FILTER);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [pending, setPending] = useState<Listener | null>(null);
@@ -34,7 +34,7 @@ export function App() {
   const tally = counts(listeners ?? []);
   const rows = visibleRows(listeners ?? [], filter);
   const hidden = (listeners?.length ?? 0) - rows.length;
-  const live = listeners !== null && !failed;
+  const connection = failed ? "offline" : listeners === null ? "connecting" : "live";
 
   const runStop = useCallback(
     (target: Listener) => {
@@ -86,27 +86,40 @@ export function App() {
 
   return (
     <div className="min-h-screen">
-      <Header tally={tally} live={live} />
-      {failed ? <Banner onRetry={retry} /> : null}
-      <Toolbar filter={filter} otherCount={tally.other} systemCount={tally.system} onChange={setFilter} />
-      {listeners === null ? (
-        <Skeleton />
-      ) : (
-        <PortTable
-          rows={rows}
-          hidden={hidden}
-          pagePort={pagePort()}
-          openKey={openKey}
-          fading={fading}
-          stopping={stopping}
-          copiedKey={copiedKey}
-          onToggle={(key) => setOpenKey((current) => (current === key ? null : key))}
-          onStop={requestStop}
-          onCopy={(row) => {
-            void copyStop(row);
-          }}
-        />
-      )}
+      <Header tally={tally} connection={connection} />
+      <main className="mx-auto max-w-6xl space-y-4 px-6 py-6">
+        {failed ? <Banner onRetry={retry} /> : null}
+        <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
+          <Toolbar filter={filter} tally={tally} onChange={setFilter} />
+          {listeners === null ? (
+            <Skeleton />
+          ) : (
+            <PortTable
+              rows={rows}
+              hidden={hidden}
+              pagePort={pagePort()}
+              openKey={openKey}
+              fading={fading}
+              stopping={stopping}
+              copiedKey={copiedKey}
+              onToggle={(key) => setOpenKey((current) => (current === key ? null : key))}
+              onStop={requestStop}
+              onCopy={(row) => {
+                void copyStop(row);
+              }}
+              onShowAll={() => setFilter({ dev: true, docker: true, other: true, system: true, query: "" })}
+            />
+          )}
+        </section>
+        <footer className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-muted">
+          <p className="tabular-nums">
+            {listeners === null
+              ? "Looking up listening ports…"
+              : `Showing ${rows.length} of ${listeners.length} listeners${updatedAt ? ` · updated ${updatedAt.toLocaleTimeString()}` : ""}`}
+          </p>
+          <p>Polls every 2 s · bound to 127.0.0.1 only · click a row for details</p>
+        </footer>
+      </main>
       {pending ? (
         <StopDialog row={pending} onCancel={cancelStop} onConfirm={confirmStop} />
       ) : null}
