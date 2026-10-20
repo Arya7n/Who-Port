@@ -36,7 +36,7 @@
     "prepublishOnly": "npm test && npm run build",
     "dev:ui": "vite --config web/vite.config.ts",
     "whoport": "tsx src/cli.ts",
-    "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts tests/resolve.test.ts tests/docker.test.ts tests/kill.test.ts tests/inspect.test.ts tests/report.test.ts tests/cli.test.ts tests/linux.test.ts tests/darwin.test.ts tests/watch.test.ts tests/ui-server.test.ts tests/ui-static.test.ts tests/classify.test.ts tests/kinds.test.ts",
+    "test": "tsx --test tests/port.test.ts tests/exec.test.ts tests/win32.test.ts tests/resolve.test.ts tests/docker.test.ts tests/kill.test.ts tests/inspect.test.ts tests/report.test.ts tests/cli.test.ts tests/linux.test.ts tests/darwin.test.ts tests/watch.test.ts tests/ui-server.test.ts tests/ui-static.test.ts tests/classify.test.ts tests/kinds.test.ts tests/launch.test.ts",
     "typecheck": "tsc --noEmit && tsc -p web/tsconfig.json --noEmit"
   },
   "dependencies": {},

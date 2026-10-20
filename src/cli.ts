@@ -23,10 +23,12 @@ import { parsePort, PortError } from "./port.js";
 import { formatKillJson, formatListenersJson, formatPortReport, formatTable, useColor } from "./report.js";
 import { nodeProjectFs, readProcesses, type ProcessDetails, type ProjectFs } from "./resolve.js";
 import { loadPortViews } from "./snapshot.js";
-import { defaultUiRoot, runUiServer, UI_ASSETS_MISSING, uiAssetsReady } from "./ui/server.js";
+import { defaultLaunchDeps, openDashboard, type LaunchDeps } from "./ui/launch.js";
+import { defaultUiRoot, runUiServer, UI_ASSETS_MISSING, UI_HOST, uiAssetsReady } from "./ui/server.js";
 import { parseInterval, parseTimeoutSeconds, snapshotFromViews, watchPort } from "./watch.js";
 
-const USAGE = "Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]\n       whoport ui [--port N]";
+const UI_USAGE = "whoport ui [--port N] [--no-open]";
+const USAGE = `Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]\n       ${UI_USAGE}`;
 
 export interface CliIO {
   log: (message: string) => void;
@@ -46,6 +48,10 @@ export interface CliDeps {
   projectFs: ProjectFs;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   staticRoot: string;
+  /** How `whoport ui` finds and starts a browser. Tests inject a spawn that never opens a window. */
+  launch: LaunchDeps;
+  /** Tests stop `whoport ui` with this instead of a real Ctrl+C. */
+  uiSignal?: AbortSignal;
 }
 
 const defaultIO: CliIO = {
@@ -91,7 +97,7 @@ function helpText(): string {
     "  whoport --all           table of listening TCP ports",
     "  whoport --json          machine-readable output",
     "  whoport watch <port>    print when the owner changes",
-    "  whoport ui [--port N]   serve the local dashboard",
+    "  whoport ui              open the local dashboard (--port N, --no-open to only serve it)",
     "",
     "The port must be an integer from 1 to 65535.",
   ].join("\n");
@@ -112,6 +118,7 @@ function makeDeps(overrides: Partial<CliDeps>): CliDeps {
     projectFs: nodeProjectFs,
     sleep: abortableSleep,
     staticRoot: defaultUiRoot(),
+    launch: defaultLaunchDeps,
   };
   if (overrides.listListeners) deps.listListeners = overrides.listListeners;
   if (overrides.readProcesses) deps.readProcesses = overrides.readProcesses;
@@ -124,6 +131,8 @@ function makeDeps(overrides: Partial<CliDeps>): CliDeps {
   if (overrides.color !== undefined) deps.color = overrides.color;
   if (overrides.sleep) deps.sleep = overrides.sleep;
   if (overrides.staticRoot !== undefined) deps.staticRoot = overrides.staticRoot;
+  if (overrides.launch) deps.launch = overrides.launch;
+  if (overrides.uiSignal) deps.uiSignal = overrides.uiSignal;
   return deps;
 }
 
@@ -290,12 +299,13 @@ async function interactive(views: readonly PortView[], deps: CliDeps, io: CliIO)
 async function commandUi(
   positionals: readonly string[],
   portRaw: string | undefined,
+  noOpen: boolean,
   blocked: boolean,
   deps: CliDeps,
   io: CliIO,
 ): Promise<number> {
   if (positionals.length !== 1 || blocked) {
-    io.error("Usage: whoport ui [--port N]");
+    io.error(`Usage: ${UI_USAGE}`);
     return 1;
   }
   let port = 4747;
@@ -318,7 +328,20 @@ async function commandUi(
     runner: deps.runner,
     log: (message) => io.log(message),
     error: (message) => io.error(message),
+    ...(deps.uiSignal ? { signal: deps.uiSignal, signals: false } : {}),
+    onListening: (boundPort) => {
+      if (noOpen) return;
+      void launchWindow(boundPort, deps.launch, io);
+    },
   });
+}
+
+/** The server keeps running whatever happens here; the startup line already printed the URL. */
+async function launchWindow(port: number, launch: LaunchDeps, io: CliIO): Promise<void> {
+  const url = `http://${UI_HOST}:${port}`;
+  const result = await openDashboard(port, launch).catch(() => ({ status: "failed" as const }));
+  if (result.status === "not-found") io.log(`No Edge or Chrome found. Open ${url} in a browser.`);
+  if (result.status === "failed") io.log(`Could not open a browser window. Open ${url} in a browser.`);
 }
 
 interface WatchFlags {
@@ -401,6 +424,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
   let intervalRaw: string | undefined;
   let timeoutRaw: string | undefined;
   let portRaw: string | undefined;
+  let noOpen = false;
   let positionals: string[] = [];
 
   try {
@@ -416,6 +440,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
         "until-free": { type: "boolean" },
         timeout: { type: "string" },
         port: { type: "string" },
+        "no-open": { type: "boolean" },
       },
       allowPositionals: true,
       strict: true,
@@ -429,6 +454,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
     intervalRaw = parsed.values.interval;
     timeoutRaw = parsed.values.timeout;
     portRaw = parsed.values.port;
+    noOpen = parsed.values["no-open"] === true;
     positionals = parsed.positionals;
   } catch {
     io.error(`Unknown argument.\n${USAGE}`);
@@ -442,11 +468,11 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
 
   if (positionals[0] === "ui") {
     const blocked = kill || yes || all || json || untilFree || intervalRaw !== undefined || timeoutRaw !== undefined;
-    return commandUi(positionals, portRaw, blocked, deps, io);
+    return commandUi(positionals, portRaw, noOpen, blocked, deps, io);
   }
 
-  if (portRaw !== undefined) {
-    io.error(`--port is only for ui.\n${USAGE}`);
+  if (portRaw !== undefined || noOpen) {
+    io.error(`--port and --no-open are only for ui.\n${USAGE}`);
     return 1;
   }
 
