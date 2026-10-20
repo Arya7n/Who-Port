@@ -3,8 +3,11 @@ import { posix, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { runTool } from "./platform/exec.js";
+import { parseTasklist } from "./platform/win32.js";
 
 export interface ProcessDetails {
+  /** Image name. Windows reads it with the details; Linux and macOS take it from the listener tool. */
+  name?: string | null;
   commandLine: string | null;
   executablePath: string | null;
   startTime: Date | null;
@@ -25,6 +28,7 @@ export interface ResolvedProject {
 
 export interface CimRecord {
   pid: number | null;
+  name: string | null;
   commandLine: string | null;
   executablePath: string | null;
   startTime: Date | null;
@@ -34,12 +38,19 @@ type PathApi = typeof win32;
 
 /**
  * The -Command script is a constant. PIDs travel in the environment as integers
- * we already parsed, so a port or a PID from argv cannot change the script text.
+ * we already parsed, and each one is cast with [int] again before it reaches WQL,
+ * so a port or a PID from argv cannot change the query text.
+ * One WQL query asks only for the listening PIDs instead of enumerating every process.
  */
 const CIM_SCRIPT = [
-  "$want = $env:WHOPORT_PIDS.Split(',') | ForEach-Object { [int]$_ }",
-  "Get-CimInstance Win32_Process | Where-Object { $want -contains [int]$_.ProcessId } | Select-Object ProcessId,CommandLine,ExecutablePath,CreationDate | ConvertTo-Json -Compress",
+  "$ids = $env:WHOPORT_PIDS.Split(',') | ForEach-Object { 'ProcessId=' + [int]$_ }",
+  "$q = 'SELECT ProcessId,Name,CommandLine,ExecutablePath,CreationDate FROM Win32_Process WHERE ' + ($ids -join ' OR ')",
+  "Get-CimInstance -Query $q | Select-Object ProcessId,Name,CommandLine,ExecutablePath,CreationDate | ConvertTo-Json -Compress",
 ].join("; ");
+
+/** PowerShell starts in about 2 s here and the query adds about 1.3 s. A loaded machine gets 8 s. */
+const CIM_TIMEOUT_MS = 8_000;
+const TASKLIST_TIMEOUT_MS = 5_000;
 
 export function formatPidList(pids: readonly number[]): string {
   const unique: number[] = [];
@@ -288,6 +299,7 @@ function recordFromRow(row: unknown): CimRecord | null {
   const source = row as Record<string, unknown>;
   return {
     pid: asPid(source.ProcessId),
+    name: asString(source.Name),
     commandLine: asString(source.CommandLine),
     executablePath: asString(source.ExecutablePath),
     startTime: parseCimDate(source.CreationDate),
@@ -336,18 +348,35 @@ export const nodeProjectFs: ProjectFs = {
   },
 };
 
+/** Names only, for when the CIM query fails. Without a name a row is unidentified and cannot be stopped. */
+export function detailsFromTasklist(output: string, pids: readonly number[]): Map<number, ProcessDetails> {
+  const names = parseTasklist(output);
+  const details = new Map<number, ProcessDetails>();
+  for (const pid of pids) {
+    const name = names.get(pid);
+    if (name === undefined) continue;
+    details.set(pid, { name, commandLine: null, executablePath: null, startTime: null, cwd: null });
+  }
+  return details;
+}
+
 export async function readWindowsProcesses(pids: readonly number[]): Promise<Map<number, ProcessDetails>> {
   const details = new Map<number, ProcessDetails>();
   if (pids.length === 0) return details;
 
   const result = await runTool("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", CIM_SCRIPT], {
     env: { ...process.env, WHOPORT_PIDS: formatPidList(pids) },
+    timeoutMs: CIM_TIMEOUT_MS,
   });
-  if (!result.ok) return details;
+  if (!result.ok) {
+    const tasklist = await runTool("tasklist", ["/FO", "CSV", "/NH"], { timeoutMs: TASKLIST_TIMEOUT_MS });
+    return tasklist.ok ? detailsFromTasklist(tasklist.stdout, pids) : details;
+  }
 
   for (const record of parseCimOutput(result.stdout)) {
     if (record.pid === null) continue;
     details.set(record.pid, {
+      name: record.name,
       commandLine: record.commandLine,
       executablePath: record.executablePath,
       startTime: record.startTime,
@@ -355,6 +384,39 @@ export async function readWindowsProcesses(pids: readonly number[]): Promise<Map
     });
   }
   return details;
+}
+
+export type ProcessReader = (pids: readonly number[]) => Promise<Map<number, ProcessDetails>>;
+
+/**
+ * Reuse a pid's details for `ttlMs` so a poll only queries new pids.
+ * A pid that came back without a name is not cached, so the next poll asks again.
+ */
+export function cacheProcessReads(read: ProcessReader, ttlMs: number, now: () => number = Date.now): ProcessReader {
+  const cache = new Map<number, { at: number; details: ProcessDetails }>();
+  return async (pids) => {
+    const at = now();
+    for (const [pid, entry] of cache) {
+      if (at - entry.at >= ttlMs) cache.delete(pid);
+    }
+    const result = new Map<number, ProcessDetails>();
+    const missing: number[] = [];
+    for (const pid of pids) {
+      const entry = cache.get(pid);
+      if (entry) result.set(pid, entry.details);
+      else missing.push(pid);
+    }
+    if (missing.length === 0) return result;
+
+    const fresh = await read(missing);
+    // Timed from the answer, not the request, so a slow lookup does not eat the ttl.
+    const answeredAt = now();
+    for (const [pid, details] of fresh) {
+      result.set(pid, details);
+      if (details.name) cache.set(pid, { at: answeredAt, details });
+    }
+    return result;
+  };
 }
 
 export function readCwd(pid: number): string | null {

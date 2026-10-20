@@ -68,6 +68,28 @@ test("a process under SystemRoot is protected and node.exe is not", () => {
   assert.equal(views.find((view) => view.pid === 60)?.protected, false);
 });
 
+test("a Windows row takes its name from the process details, and no name fails closed", () => {
+  const views = buildViews(
+    [listener({ pid: 1524, command: "", port: 135 }), listener({ pid: 7000, command: "", port: 8080 })],
+    new Map([[1524, { name: "svchost.exe", commandLine: null, executablePath: null, startTime: null, cwd: null }]]),
+    new Map(),
+    emptyFs(),
+    now,
+  );
+  const named = views.find((view) => view.pid === 1524);
+  assert.equal(named?.command, "svchost.exe");
+  assert.equal(named?.kind, "system");
+  const unnamed = views.find((view) => view.pid === 7000);
+  assert.equal(unnamed?.kind, "unidentified");
+  assert.deepEqual(sharedTarget(unnamed ? [unnamed] : []), {
+    kind: "process",
+    pid: 7000,
+    command: "(unknown)",
+    protected: false,
+    identified: false,
+  });
+});
+
 test("two owners of one port are not stopped together", () => {
   const views = buildViews(
     [listener({ pid: 1, address: "127.0.0.1" }), listener({ pid: 2, address: "0.0.0.0" })],

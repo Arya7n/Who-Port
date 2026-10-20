@@ -4,6 +4,8 @@ import { posix, win32 } from "node:path";
 import test from "node:test";
 
 import {
+  cacheProcessReads,
+  detailsFromTasklist,
   etimeToSeconds,
   extractPaths,
   findProjectRoot,
@@ -240,11 +242,56 @@ test("parses captured CIM JSON, including a system process with null paths", () 
   assert.deepEqual(system, [
     {
       pid: null,
+      name: null,
       commandLine: null,
       executablePath: null,
       startTime: new Date(1792484934428),
     },
   ]);
+});
+
+test("reads the image name from the same CIM row", () => {
+  const [record] = parseCimOutput(
+    '{"ProcessId":4,"Name":"System","CommandLine":null,"ExecutablePath":null,"CreationDate":"/Date(1792484934428)/"}',
+  );
+  assert.equal(record?.pid, 4);
+  assert.equal(record?.name, "System");
+});
+
+test("tasklist fallback gives names for the asked PIDs only", () => {
+  const output = '"svchost.exe","1524","Services","0","12,000 K"\r\n"node.exe","18432","Console","1","48,000 K"\r\n';
+  const details = detailsFromTasklist(output, [18432, 999]);
+  assert.deepEqual([...details.keys()], [18432]);
+  assert.equal(details.get(18432)?.name, "node.exe");
+  assert.equal(details.get(18432)?.commandLine, null);
+});
+
+test("caches named details per pid and asks again after the ttl", async () => {
+  let clock = 0;
+  const asked: number[][] = [];
+  const read = cacheProcessReads(
+    async (pids) => {
+      asked.push([...pids]);
+      clock += 3_000;
+      return new Map(
+        pids.map((pid) => [
+          pid,
+          { name: pid === 7 ? null : "node.exe", commandLine: null, executablePath: null, startTime: null, cwd: null },
+        ]),
+      );
+    },
+    5_000,
+    () => clock,
+  );
+
+  // A 3 s lookup answers at 3 s. Pid 1 stays cached until 8 s; pid 7 had no name and is asked again.
+  await read([1, 7]);
+  clock = 5_000;
+  const second = await read([1, 7, 9]);
+  assert.equal(second.get(1)?.name, "node.exe");
+  clock = 8_000;
+  await read([1]);
+  assert.deepEqual(asked, [[1, 7], [7, 9], [1]]);
 });
 
 test("parses a CIM array and ignores malformed output", () => {

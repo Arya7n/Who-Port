@@ -18,6 +18,7 @@ export type ToolResult = ToolSuccess | ToolFailure;
 export interface RunToolOptions {
   /** Replaces the child environment. Callers must spread `process.env` themselves. */
   env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
 }
 
 /**
@@ -53,7 +54,7 @@ export function runTool(file: string, args: readonly string[], options: RunToolO
       [...args],
       {
         windowsHide: true,
-        timeout: 15_000,
+        timeout: options.timeoutMs ?? 15_000,
         maxBuffer: 16 * 1024 * 1024,
         ...(options.env ? { env: options.env } : {}),
       },

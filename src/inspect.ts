@@ -76,6 +76,7 @@ export function describeVerdict(view: Omit<PortView, "verdict">, now: Date): str
 
 function imageName(listener: Listener, info: ProcessDetails | null): string {
   if (listener.command.length > 0) return listener.command;
+  if (info?.name) return info.name;
   const base = info?.executablePath?.split(/[/\\]/).pop();
   return base && base.length > 0 ? base : "";
 }

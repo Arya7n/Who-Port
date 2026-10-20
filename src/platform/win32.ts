@@ -116,8 +116,8 @@ export function withCommands(listeners: readonly Listener[], commands: ReadonlyM
 }
 
 /**
- * `tasklist /FO CSV /NH` is the same tool as the default table, but image names
- * such as "System Idle Process" contain spaces, so a whitespace table is ambiguous.
+ * netstat only. Image names come with the process details (one CIM query for the
+ * listening PIDs), which is much faster than `tasklist` listing every process.
  */
 export async function listWin32Listeners(): Promise<ListenerQuery> {
   const netstat = await runTool("netstat", ["-ano"]);
@@ -137,18 +137,5 @@ export async function listWin32Listeners(): Promise<ListenerQuery> {
     throw new ToolError("failed", `netstat failed: ${netstat.message}`);
   }
 
-  const rows = parseNetstat(netstat.stdout);
-  const tasklist = await runTool("tasklist", ["/FO", "CSV", "/NH"]);
-  if (!tasklist.ok) {
-    const reason = tasklist.missing ? "tasklist was not found." : `tasklist failed (${tasklist.message}).`;
-    return {
-      listeners: rows,
-      warnings: [`${reason} Process names will be missing.`],
-    };
-  }
-
-  return {
-    listeners: withCommands(rows, parseTasklist(tasklist.stdout)),
-    warnings: [],
-  };
+  return { listeners: parseNetstat(netstat.stdout), warnings: [] };
 }

@@ -13,7 +13,7 @@ import { UNIDENTIFIED_MESSAGE } from "../kinds.js";
 import { listListeners } from "../platform/index.js";
 import { parsePort, PortError } from "../port.js";
 import { formatListenersJson } from "../report.js";
-import { nodeProjectFs, readProcesses } from "../resolve.js";
+import { cacheProcessReads, nodeProjectFs, readProcesses } from "../resolve.js";
 import { loadPortViews, type SnapshotSource } from "../snapshot.js";
 import { classifyStaticUrl, fileInsideRoot, sameOrInside, staticCacheControl, staticContentType } from "./static.js";
 
@@ -21,6 +21,8 @@ export const DEFAULT_UI_PORT = 4747;
 export const UI_HOST = "127.0.0.1";
 export const MAX_KILL_BODY_BYTES = 1024;
 export const UI_ASSETS_MISSING = "UI assets not built. Run npm run build.";
+/** The dashboard polls 2 s after each response, so 5 s spans one poll and the lookup itself. */
+export const PROCESS_CACHE_MS = 5_000;
 
 /** Compiled server sits in dist/ui. The tsx entry lives in src/ui and looks one level up. */
 export function defaultUiRoot(): string {
@@ -145,7 +147,10 @@ export type StartedUi =
 
 interface ResolvedUi {
   port: number;
+  /** Polls read through the per-pid cache. */
   source: SnapshotSource;
+  /** The check right before a stop never uses cached details, so a reused pid is seen. */
+  freshSource: SnapshotSource;
   runner: ProcessRunner;
   html: (() => Promise<string | null>) | null;
   staticRoot: string | null;
@@ -207,7 +212,8 @@ function resolveOptions(options: UiServerOptions): ResolvedUi {
   const staticRoot = options.staticRoot !== undefined ? options.staticRoot : html ? null : defaultUiRoot();
   return {
     port: options.port,
-    source: options.source,
+    source: { ...options.source, readProcesses: cacheProcessReads(options.source.readProcesses, PROCESS_CACHE_MS) },
+    freshSource: options.source,
     runner: options.runner,
     html,
     staticRoot,
@@ -270,7 +276,7 @@ async function killResponse(options: ResolvedUi, pid: number): Promise<{ status:
   if (planned.action !== "stop") return { status: planned.status, body: planned.body };
 
   // The poll that showed this pid can be seconds old, and the pid may have been reused.
-  const again = await loadPortViews(options.source, null);
+  const again = await loadPortViews(options.freshSource, null);
   const current = planKill(again.views, pid);
   if (current.action !== "stop") return { status: current.status, body: current.body };
 
