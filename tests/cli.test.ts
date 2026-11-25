@@ -64,6 +64,14 @@ test("prints help and does not look up a port", async () => {
   assert.match(cap.logs.join("\n"), /Usage: whoport \[port\]/);
 });
 
+test("prints the package version and does not look up a port", async () => {
+  const cap = capture();
+  const code = await main(["--version"], cap.io, deps());
+  assert.equal(code, 0);
+  assert.match(cap.logs.join("\n"), /^\d+\.\d+\.\d+$/);
+  assert.equal(cap.errors.length, 0);
+});
+
 test("rejects an invalid port before spawning a tool", async () => {
   const cap = capture();
   const code = await main(["nope"], cap.io, deps());

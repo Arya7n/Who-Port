@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { dirname, join } from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { listContainers } from "./docker.js";
@@ -28,7 +29,13 @@ import { defaultUiRoot, runUiServer, UI_ASSETS_MISSING, UI_HOST, uiAssetsReady }
 import { parseInterval, parseTimeoutSeconds, snapshotFromViews, watchPort } from "./watch.js";
 
 const UI_USAGE = "whoport ui [--port N] [--no-open]";
-const USAGE = `Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]\n       ${UI_USAGE}`;
+const USAGE = `Usage: whoport [port] [--all] [--json] [--kill] [--yes]\n       whoport watch <port> [--interval ms] [--until-free] [--timeout seconds]\n       ${UI_USAGE}\n       whoport --version`;
+
+export function packageVersion(): string {
+  const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+  const raw = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: unknown };
+  return typeof raw.version === "string" ? raw.version : "0.0.0";
+}
 
 export interface CliIO {
   log: (message: string) => void;
@@ -96,6 +103,7 @@ function helpText(): string {
     "  whoport --json          machine-readable output",
     "  whoport watch <port>    print when the owner changes",
     "  whoport ui              open the local dashboard (--port N, --no-open to only serve it)",
+    "  whoport --version       print the package version",
     "",
     "The port must be an integer from 1 to 65535.",
   ].join("\n");
@@ -380,12 +388,13 @@ async function commandWatch(positionals: readonly string[], flags: WatchFlags, d
     return 1;
   }
 
-  // SIGINT is handled here so Ctrl+C returns 0 instead of a stack trace.
+  // SIGINT/SIGTERM are handled here so a stop signal returns 0 instead of a stack trace.
   const controller = new AbortController();
-  const onSigint = (): void => {
+  const onAbort = (): void => {
     controller.abort();
   };
-  process.on("SIGINT", onSigint);
+  process.on("SIGINT", onAbort);
+  process.on("SIGTERM", onAbort);
   try {
     return await watchPort({
       port,
@@ -406,13 +415,15 @@ async function commandWatch(positionals: readonly string[], flags: WatchFlags, d
       },
     });
   } finally {
-    process.off("SIGINT", onSigint);
+    process.off("SIGINT", onAbort);
+    process.off("SIGTERM", onAbort);
   }
 }
 
 export async function main(argv: readonly string[], io: CliIO = defaultIO, overrides: Partial<CliDeps> = {}): Promise<number> {
   const deps = makeDeps(overrides);
   let help = false;
+  let version = false;
   let kill = false;
   let yes = false;
   let all = false;
@@ -429,6 +440,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
       args: [...argv],
       options: {
         help: { type: "boolean", short: "h" },
+        version: { type: "boolean", short: "V" },
         kill: { type: "boolean" },
         yes: { type: "boolean" },
         all: { type: "boolean" },
@@ -443,6 +455,7 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
       strict: true,
     });
     help = parsed.values.help === true;
+    version = parsed.values.version === true;
     kill = parsed.values.kill === true;
     yes = parsed.values.yes === true;
     all = parsed.values.all === true;
@@ -460,6 +473,10 @@ export async function main(argv: readonly string[], io: CliIO = defaultIO, overr
 
   if (help) {
     io.log(helpText());
+    return 0;
+  }
+  if (version) {
+    io.log(packageVersion());
     return 0;
   }
 

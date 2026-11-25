@@ -227,6 +227,21 @@ test("SIGINT during watch returns 0", async () => {
   assert.equal(code, 0);
 });
 
+test("SIGTERM during watch returns 0", async () => {
+  const code = await main(["watch", "3000"], { log: () => {}, error: () => {} }, {
+    color: false,
+    listListeners: async () => ({ listeners: [], warnings: [] }),
+    containers: async () => new Map(),
+    readProcesses: async () => new Map(),
+    sleep: (_ms, signal) =>
+      new Promise((resolve) => {
+        signal.addEventListener("abort", () => resolve(), { once: true });
+        process.emit("SIGTERM");
+      }),
+  });
+  assert.equal(code, 0);
+});
+
 test("rejects an interval under 500 ms before polling", async () => {
   let listed = 0;
   const errors: string[] = [];
