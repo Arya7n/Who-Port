@@ -36,9 +36,13 @@ export function PortTable({
         <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-subtle text-muted">
           <RadarIcon className="h-6 w-6" />
         </span>
-        <p className="font-medium">Nothing is listening in this view</p>
+        <p className="font-medium">{hidden > 0 ? "Nothing is listening in this view" : "No listening TCP ports"}</p>
         <p className="mt-1 text-sm text-muted">
-          {hidden === 1 ? "1 row is hidden by the current filter." : `${hidden} rows are hidden by the current filter.`}
+          {hidden > 0
+            ? hidden === 1
+              ? "1 row is hidden by the current filter."
+              : `${hidden} rows are hidden by the current filter.`
+            : "Start a server or container, then it will show up here."}
         </p>
         {hidden > 0 ? (
           <button
