@@ -58,7 +58,12 @@ export function StopDialog({
   }, [onCancel, onConfirm]);
 
   return (
-    <div className="fade-in fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div
+      className="fade-in fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
       <div
         ref={dialogRef}
         role="dialog"
