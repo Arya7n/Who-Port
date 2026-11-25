@@ -7,12 +7,16 @@ export interface ReportStyle {
 
 const RESET = "\x1b[0m";
 
-/** A non-empty NO_COLOR disables color. */
+/**
+ * A non-empty NO_COLOR disables color.
+ * FORCE_COLOR wins over a missing TTY so pipes can still get ANSI when asked.
+ */
 export function useColor(env: NodeJS.ProcessEnv, isTTY: boolean): boolean {
-  if (!isTTY) return false;
   const noColor = env.NO_COLOR;
   if (noColor !== undefined && noColor !== "") return false;
-  return true;
+  const force = env.FORCE_COLOR;
+  if (force !== undefined && force !== "" && force !== "0") return true;
+  return isTTY;
 }
 
 export function truncateCommand(command: string, max = 96): string {

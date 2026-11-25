@@ -124,6 +124,9 @@ test("colors a dev process green and dims the pid", () => {
   assert.equal(useColor({ NO_COLOR: "1" }, true), false);
   assert.equal(useColor({}, false), false);
   assert.equal(useColor({}, true), true);
+  assert.equal(useColor({ FORCE_COLOR: "1" }, false), true);
+  assert.equal(useColor({ FORCE_COLOR: "0" }, false), false);
+  assert.equal(useColor({ NO_COLOR: "1", FORCE_COLOR: "1" }, true), false);
 });
 
 test("truncates a long command", () => {

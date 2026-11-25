@@ -6,7 +6,19 @@ import { isDevRuntime, rowKind } from "../src/kinds.js";
 const none = { docker: null, protected: false, project: null };
 
 test("known runtimes and local services are dev without a project", () => {
-  for (const command of ["node.exe", "mongod.exe", "redis-server.exe", "python3.12", "java", "postgres.exe", "bun"]) {
+  for (const command of [
+    "node.exe",
+    "mongod.exe",
+    "redis-server.exe",
+    "python3.12",
+    "java",
+    "postgres.exe",
+    "bun",
+    "tsx.exe",
+    "ts-node",
+    "vite",
+    "cargo.exe",
+  ]) {
     assert.equal(rowKind({ ...none, command }), "dev", command);
   }
   assert.equal(isDevRuntime("C:\\Program Files\\nodejs\\node.exe"), true);
